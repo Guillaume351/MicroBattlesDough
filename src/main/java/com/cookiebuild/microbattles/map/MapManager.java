@@ -22,7 +22,7 @@ public class MapManager {
         MapManager.maps.remove(name);
     }
 
-    private static  void loadGameMaps() {
+    private static void loadGameMaps() {
         // Fetch list of map names from plugin's config
         // Load each map
         MicroBattles.getInstance().getLogger().info("Loading game maps...");

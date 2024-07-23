@@ -1,11 +1,9 @@
 package com.cookiebuild.microbattles.map;
 
-import com.cookiebuild.microbattles.MicroBattles;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -13,15 +11,14 @@ import java.util.Map;
 public class GameMap {
 
     private String name;
-    private Map<Integer, Location> teamSpawns;
-    private Map<Location, Material> wallBlocks;
+    private final Map<Integer, Location> teamSpawns;
+    private final Map<Location, Material> wallBlocks;
 
     public GameMap(String name) {
         this.name = name;
         this.teamSpawns = new HashMap<>();
         this.wallBlocks = new HashMap<>();
 
-        // TODO: load wall blocks & team spawns from map's config
     }
 
     public String getName() {
