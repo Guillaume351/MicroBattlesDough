@@ -1,19 +1,18 @@
 package com.cookiebuild.microbattles.game;
 
 import com.cookiebuild.cookiedough.game.Game;
-import com.cookiebuild.cookiedough.game.GameStatus;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
 import com.cookiebuild.microbattles.map.GameMap;
 
 import java.util.HashMap;
 
-public class MicroBattlesGame extends Game implements GameStatus {
+public class MicroBattlesGame extends Game {
     int teamSize = 3;
     private GameMap map;
     private final HashMap<String, MicroBattlesTeam> teams = new HashMap<>();
 
-    public MicroBattlesGame(int gameNumber) {
-        super(gameNumber);
+    public MicroBattlesGame() {
+        super("MicroBattles");
         teams.put("Red", new MicroBattlesTeam("Red", teamSize));
         teams.put("Blue", new MicroBattlesTeam("Blue", teamSize));
         teams.put("Yellow", new MicroBattlesTeam("Yellow", teamSize));
@@ -47,11 +46,6 @@ public class MicroBattlesGame extends Game implements GameStatus {
         return this.getState() == Game.GAME_FINISHED;
     }
 
-    // Implementation of GameStatus interface methods
-    @Override
-    public int getGameNumber() {
-        return super.getGameNumber();
-    }
 
     @Override
     public int getPlayerCount() {

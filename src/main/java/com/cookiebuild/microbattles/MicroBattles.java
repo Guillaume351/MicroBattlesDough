@@ -20,7 +20,7 @@ public class MicroBattles extends JavaPlugin {
     public void onEnable() {
         instance = this;
         // Example of initializing and registering a game
-        MicroBattlesGame game1 = new MicroBattlesGame(1);
+        MicroBattlesGame game1 = new MicroBattlesGame();
         activeGames.add(game1);
         registerGames();
     }
