@@ -63,8 +63,11 @@ public class MapManager {
         return map;  // You might need to pass more parameters to GameMap constructor if it requires it.
     }
 
-    private static void loadGameMaps() {
+    public static void loadGameMaps() {
         MicroBattles.getInstance().getLogger().info("Loading game maps...");
+        // for now, use game-X (1 to 8) for maps
+
+
         for (String mapName : Objects.requireNonNull(MicroBattles.getInstance().getConfig().getConfigurationSection("maps")).getKeys(false)) {
             GameMap map = initializeMapWithCoordinates(mapName);  // Initialize GameMap with coordinates
             maps.put(mapName, map);

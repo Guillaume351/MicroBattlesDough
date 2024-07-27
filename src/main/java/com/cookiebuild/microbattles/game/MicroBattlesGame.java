@@ -22,10 +22,10 @@ public class MicroBattlesGame extends Game {
         // TODO Ask MapManager for a map. Load it
         setupTeams();
 
-        Bukkit.getScheduler().runTaskAsynchronously(MicroBattles.getInstance(), () -> {
+        Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
             // loap map
             try {
-                map = MapManager.loadMapForGame(this.getGameId(), "test");
+                map = MapManager.loadMapForGame(this.getGameId(), "game-1");
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

@@ -2,6 +2,7 @@ package com.cookiebuild.microbattles;
 
 import com.cookiebuild.cookiedough.game.GameManager;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
+import com.cookiebuild.microbattles.map.MapManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MicroBattles extends JavaPlugin {
@@ -21,6 +22,9 @@ public class MicroBattles extends JavaPlugin {
     @Override
     public void onEnable() {
         instance = this;
+        saveResource("config.yml", false);
+
+        MapManager.loadGameMaps();
 
         MicroBattles.registerNewGame();
     }
