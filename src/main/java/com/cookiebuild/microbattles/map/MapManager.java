@@ -1,18 +1,16 @@
 package com.cookiebuild.microbattles.map;
 
 import com.cookiebuild.cookiedough.CookieDough;
+import com.cookiebuild.cookiedough.utils.FileUtils;
 import com.cookiebuild.cookiedough.utils.ZipUtils;
 import com.cookiebuild.microbattles.MicroBattles;
-import org.bukkit.Bukkit;
-import org.bukkit.World;
-import org.bukkit.WorldCreator;
+import org.bukkit.*;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.generator.ChunkGenerator;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 
 public class MapManager {
 
@@ -47,29 +45,52 @@ public class MapManager {
             throw new IllegalArgumentException("Map " + mapName + " does not exist.");
         }
 
-        File zippedMap = new File("mb_maps", mapName + ".zip");   // your maps are zipped
+        File zippedMap = new File("mb_maps", mapName + ".zip");
         File gameMapDir = new File("game_maps", gameUUID.toString());
         ZipUtils.unzip(zippedMap, gameMapDir);
-        // once unzipped, you can load the map from the gameMapDir
-        // use API to load
-        CookieDough.getInstance().getLogger().info("Loaded map " + mapName);
-        WorldCreator worldCreator = new WorldCreator(gameMapDir.getName());
 
-        World world = Bukkit.createWorld(worldCreator);
+        if (!gameMapDir.exists()) {
+            throw new IOException("Unzipped world folder does not exist: " + gameMapDir.getAbsolutePath());
+        }
+
+        String worldName = gameUUID.toString();
+        WorldCreator worldCreator = new WorldCreator(worldName);
+        worldCreator.environment(World.Environment.NORMAL);
+        worldCreator.type(WorldType.FLAT);
+        worldCreator.generateStructures(false);
+        worldCreator.generator(new VoidChunkGenerator());
+
+        World world = worldCreator.createWorld();
+        if (world == null) {
+            throw new IOException("Failed to create world: " + worldName);
+        }
+
+        CookieDough.getInstance().getLogger().info("Created world " + world.getName());
+        world.setAutoSave(false);
+        world.setThundering(false);
+
+        // Copy map data to the newly created world
+        File worldFolder = world.getWorldFolder();
+        FileUtils.copyDirectory(gameMapDir, worldFolder);
 
         // Recreate the game map with the world loaded
+        map = new GameMap(mapName);
         map.setWallCoordinates(getWallCoordinatesForMap(mapName), world);
 
-        return map;  // You might need to pass more parameters to GameMap constructor if it requires it.
+        // Set team spawns
+        List<Location> teamSpawns = getTeamSpawnsForMap(mapName, world);
+        for (int i = 0; i < teamSpawns.size(); i++) {
+            map.setTeamSpawn(i, teamSpawns.get(i));
+        }
+
+        return map;
     }
 
     public static void loadGameMaps() {
         MicroBattles.getInstance().getLogger().info("Loading game maps...");
-        // for now, use game-X (1 to 8) for maps
-
 
         for (String mapName : Objects.requireNonNull(MicroBattles.getInstance().getConfig().getConfigurationSection("maps")).getKeys(false)) {
-            GameMap map = initializeMapWithCoordinates(mapName);  // Initialize GameMap with coordinates
+            GameMap map = initializeMapWithCoordinates(mapName);
             maps.put(mapName, map);
             MicroBattles.getInstance().getLogger().info("Loaded map " + mapName);
         }
@@ -79,11 +100,45 @@ public class MapManager {
         World world = Bukkit.getWorld(mapName); // Placeholder, replace with actual way to get world instance
         GameMap gameMap = new GameMap(mapName);
         gameMap.setWallCoordinates(getWallCoordinatesForMap(mapName), world);
+
+        // Get team spawns from config
+        List<Location> teamSpawns = getTeamSpawnsForMap(mapName, world);
+        for (int i = 0; i < teamSpawns.size(); i++) {
+            gameMap.setTeamSpawn(i, teamSpawns.get(i));
+        }
+
         return gameMap;
+    }
+
+    private static List<Location> getTeamSpawnsForMap(String mapName, World world) {
+        ConfigurationSection mapSection = MicroBattles.getInstance().getConfig().getConfigurationSection("maps")
+                .getConfigurationSection(mapName);
+        List<?> teamSpawnsList = mapSection.getList("team-spawns");
+
+        List<Location> teamSpawns = new ArrayList<>();
+        for (Object location : teamSpawnsList) {
+            if (location instanceof List<?> coords) {
+                if (coords.size() == 3 && coords.get(0) instanceof Number && coords.get(1) instanceof Number && coords.get(2) instanceof Number) {
+                    double x = ((Number) coords.get(0)).doubleValue();
+                    double y = ((Number) coords.get(1)).doubleValue();
+                    double z = ((Number) coords.get(2)).doubleValue();
+                    teamSpawns.add(new Location(world, x, y, z));
+                }
+            }
+        }
+
+        return teamSpawns;
     }
 
     private static int[] getWallCoordinatesForMap(String mapName) {
         int mapNumber = Integer.parseInt(mapName.replace("game-", ""));
         return WALL_COORDINATES[mapNumber - 1];
+    }
+
+    private static class VoidChunkGenerator extends ChunkGenerator {
+        @Override
+        public ChunkData generateChunkData(World world, Random random, int x, int z, BiomeGrid biome) {
+            return createChunkData(world);
+        }
     }
 }

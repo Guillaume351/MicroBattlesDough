@@ -48,6 +48,7 @@ public class GameMap {
         wallBlocks.remove(location);
     }
 
+
     public void removeWalls(World world) {
         for (Location location : wallBlocks.keySet()) {
             Block block = world.getBlockAt(location);

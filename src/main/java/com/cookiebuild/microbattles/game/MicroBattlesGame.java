@@ -8,6 +8,8 @@ import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.map.GameMap;
 import com.cookiebuild.microbattles.map.MapManager;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -41,7 +43,7 @@ public class MicroBattlesGame extends Game {
 
     public void assignTeam(CookiePlayer player) {
         int minPlayerAmount = teams.values().stream().mapToInt(MicroBattlesTeam::getPlayerCount).min().orElse(0);
-        MicroBattlesTeam assignedTeam = teams.values().stream().filter(team -> team.getPlayerCount() < minPlayerAmount).findFirst().orElse(null);
+        MicroBattlesTeam assignedTeam = teams.values().stream().filter(team -> team.getPlayerCount() <= minPlayerAmount).findFirst().orElse(null);
         if (assignedTeam == null) {
             throw new IllegalStateException("No team available");
         }
@@ -50,9 +52,11 @@ public class MicroBattlesGame extends Game {
 
     @Override
     public void addPlayer(CookiePlayer player) {
-        super.addPlayer(player);
-        assignTeam(player);
-        teleportToGame(player);
+        if (!getPlayers().contains(player)) {
+            super.addPlayer(player);
+            assignTeam(player);
+            teleportToGame(player);
+        }
     }
 
     @Override
@@ -60,9 +64,26 @@ public class MicroBattlesGame extends Game {
         GameManager.addGame(new MicroBattlesGame());
     }
 
+    public int getTeamNumber(CookiePlayer player) {
+        // find the team number of the player
+        int teamNumber = teams.values().stream().mapToInt(team -> team.getPlayerCount()).min().orElse(0);
+        return teamNumber;
+    }
+
     @Override
     protected void teleportToGame(CookiePlayer player) {
+        Location spawnLocation = map.getTeamSpawn(getTeamNumber(player));
+        World gameWorld = Bukkit.getWorld(this.getGameId().toString());
+
+        if (gameWorld == null) {
+            player.getPlayer().sendMessage("Error: The game world is not loaded.");
+            return;
+        }
+
+        spawnLocation.setWorld(gameWorld);
+
         // Implement teleportation logic
+        player.getPlayer().teleport(spawnLocation);
     }
 
     @Override
