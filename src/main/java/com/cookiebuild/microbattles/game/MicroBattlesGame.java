@@ -6,6 +6,8 @@ import com.cookiebuild.cookiedough.game.GameState;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
 import com.cookiebuild.cookiedough.ui.CustomScoreboardManager;
 import com.cookiebuild.microbattles.MicroBattles;
+import com.cookiebuild.microbattles.kits.Kit;
+import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.map.GameMap;
 import com.cookiebuild.microbattles.map.MapManager;
 import org.bukkit.Bukkit;
@@ -92,6 +94,11 @@ public class MicroBattlesGame extends Game {
 
         // Implement teleportation logic
         player.getPlayer().teleport(spawnLocation);
+
+        // Give player kit
+        // TODO: implement kit selection
+        Kit kit = KitManager.getInstance().getKit("Default");
+        kit.equipPlayer(player.getPlayer());
     }
 
     @Override
