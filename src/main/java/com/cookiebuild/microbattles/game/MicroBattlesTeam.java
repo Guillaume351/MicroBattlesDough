@@ -26,4 +26,9 @@ public class MicroBattlesTeam {
     public int getPlayerCount() {
         return players.size();
     }
+
+    public String getName() {
+        return name;
+    }
+
 }

@@ -4,12 +4,14 @@ import com.cookiebuild.cookiedough.game.Game;
 import com.cookiebuild.cookiedough.game.GameManager;
 import com.cookiebuild.cookiedough.game.GameState;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
+import com.cookiebuild.cookiedough.ui.CustomScoreboardManager;
 import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.map.GameMap;
 import com.cookiebuild.microbattles.map.MapManager;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.entity.Player;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -19,10 +21,16 @@ public class MicroBattlesGame extends Game {
     private GameMap map;
     private final HashMap<String, MicroBattlesTeam> teams = new HashMap<>();
 
+    private static final int START_DELAY_SECONDS = 10;
+
+    private final CustomScoreboardManager scoreboardManager;
+
     public MicroBattlesGame() {
         super("MicroBattles");
         // TODO Ask MapManager for a map. Load it
         setupTeams();
+
+        this.scoreboardManager = new CustomScoreboardManager();
 
         Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
             // loap map
@@ -102,6 +110,48 @@ public class MicroBattlesGame extends Game {
         if (isGameEnded()) return false;
         this.addPlayer(player);
         return true;
+    }
+
+
+    @Override
+    public void tick() {
+        //super.tick(); TODO: Fix this
+        updateGameInfo();
+    }
+
+    private void updateGameInfo() {
+        String gameState;
+        String countdownInfo = "";
+
+        if (getState() == GameState.OPEN) {
+            gameState = "Waiting for players";
+            if (getStartTimer() > 0) {
+                countdownInfo = "Starting in " + (START_DELAY_SECONDS - getStartTimer()) + "s";
+            }
+        } else if (getState() == GameState.RUNNING) {
+            gameState = "Game in progress";
+        } else {
+            gameState = "Game ended";
+        }
+
+        for (CookiePlayer player : getPlayers()) {
+            Player bukkitPlayer = player.getPlayer();
+
+            // Update action bar
+            bukkitPlayer.sendActionBar(gameState + " " + countdownInfo);
+
+            // Update scoreboard
+            scoreboardManager.createScoreboard(bukkitPlayer, "MicroBattles");
+            scoreboardManager.updateScore(bukkitPlayer, "Game State:", 15);
+            scoreboardManager.updateScore(bukkitPlayer, gameState, 14);
+            scoreboardManager.updateScore(bukkitPlayer, "", 13);
+            scoreboardManager.updateScore(bukkitPlayer, "Players:", 12);
+
+            int line = 11;
+            for (MicroBattlesTeam team : teams.values()) {
+                scoreboardManager.updateScore(bukkitPlayer, team.getName() + ": " + team.getPlayerCount(), line--);
+            }
+        }
     }
 
 }
