@@ -57,12 +57,14 @@ public class MapManager {
         }
 
         String worldName = gameUUID.toString();
-        WorldCreator worldCreator = new WorldCreator(worldName);
-        worldCreator.environment(World.Environment.NORMAL);
-        worldCreator.generateStructures(false);
-        worldCreator.generator(new VoidChunkGenerator());
+        ZipUtils.unzip(zippedMap, gameMapDir);
 
-        World world = worldCreator.createWorld();
+        World world = new WorldCreator(gameMapDir.getPath())
+                .environment(World.Environment.NORMAL)
+                .generateStructures(false)
+                .generator(new VoidChunkGenerator())
+                .createWorld();
+
         if (world == null) {
             throw new IOException("Failed to create world: " + worldName);
         }

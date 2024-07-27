@@ -81,7 +81,7 @@ public class MicroBattlesGame extends Game {
     @Override
     protected void teleportToGame(CookiePlayer player) {
         Location spawnLocation = map.getTeamSpawn(getTeamNumber(player));
-        World gameWorld = Bukkit.getWorld(this.getGameId().toString());
+        World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
 
         if (gameWorld == null) {
             player.getPlayer().sendMessage("Error: The game world is not loaded.");
