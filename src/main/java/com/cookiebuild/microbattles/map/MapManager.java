@@ -4,7 +4,10 @@ import com.cookiebuild.cookiedough.CookieDough;
 import com.cookiebuild.cookiedough.utils.FileUtils;
 import com.cookiebuild.cookiedough.utils.ZipUtils;
 import com.cookiebuild.microbattles.MicroBattles;
-import org.bukkit.*;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.WorldCreator;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.generator.ChunkGenerator;
 
@@ -56,7 +59,6 @@ public class MapManager {
         String worldName = gameUUID.toString();
         WorldCreator worldCreator = new WorldCreator(worldName);
         worldCreator.environment(World.Environment.NORMAL);
-        worldCreator.type(WorldType.FLAT);
         worldCreator.generateStructures(false);
         worldCreator.generator(new VoidChunkGenerator());
 
