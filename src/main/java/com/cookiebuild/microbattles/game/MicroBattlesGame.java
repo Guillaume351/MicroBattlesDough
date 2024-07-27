@@ -1,9 +1,15 @@
 package com.cookiebuild.microbattles.game;
 
 import com.cookiebuild.cookiedough.game.Game;
+import com.cookiebuild.cookiedough.game.GameManager;
+import com.cookiebuild.cookiedough.game.GameState;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
+import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.map.GameMap;
+import com.cookiebuild.microbattles.map.MapManager;
+import org.bukkit.Bukkit;
 
+import java.io.IOException;
 import java.util.HashMap;
 
 public class MicroBattlesGame extends Game {
@@ -13,11 +19,24 @@ public class MicroBattlesGame extends Game {
 
     public MicroBattlesGame() {
         super("MicroBattles");
+        // TODO Ask MapManager for a map. Load it
+        setupTeams();
+
+        Bukkit.getScheduler().runTaskAsynchronously(MicroBattles.getInstance(), () -> {
+            // loap map
+            try {
+                map = MapManager.loadMapForGame(this.getGameId(), "test");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    public void setupTeams() {
         teams.put("Red", new MicroBattlesTeam("Red", teamSize));
         teams.put("Blue", new MicroBattlesTeam("Blue", teamSize));
         teams.put("Yellow", new MicroBattlesTeam("Yellow", teamSize));
         teams.put("Green", new MicroBattlesTeam("Green", teamSize));
-        // TODO Ask MapManager for a map. Load it
     }
 
     public void assignTeam(CookiePlayer player) {
@@ -37,13 +56,18 @@ public class MicroBattlesGame extends Game {
     }
 
     @Override
+    public void registerANewGame() {
+        GameManager.addGame(new MicroBattlesGame());
+    }
+
+    @Override
     protected void teleportToGame(CookiePlayer player) {
         // Implement teleportation logic
     }
 
     @Override
     public boolean isGameEnded() {
-        return this.getState() == Game.GAME_FINISHED;
+        return this.getState() == GameState.FINISHED;
     }
 
 
@@ -58,4 +82,5 @@ public class MicroBattlesGame extends Game {
         this.addPlayer(player);
         return true;
     }
+
 }
