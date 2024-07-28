@@ -3,8 +3,10 @@ package com.cookiebuild.microbattles.game;
 import com.cookiebuild.cookiedough.game.Game;
 import com.cookiebuild.cookiedough.game.GameManager;
 import com.cookiebuild.cookiedough.game.GameState;
+import com.cookiebuild.cookiedough.lobby.LobbyManager;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
 import com.cookiebuild.cookiedough.ui.CustomScoreboardManager;
+import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.kits.Kit;
 import com.cookiebuild.microbattles.kits.KitManager;
@@ -17,6 +19,8 @@ import org.bukkit.entity.Player;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class MicroBattlesGame extends Game {
     int teamSize = 3;
@@ -24,18 +28,19 @@ public class MicroBattlesGame extends Game {
     private final HashMap<String, MicroBattlesTeam> teams = new HashMap<>();
 
     private static final int START_DELAY_SECONDS = 10;
+    private static final int WALL_REMOVE_DELAY_SECONDS = 15;
+    private int wallRemoveTimer = 0;
+    private boolean wallRemoved = false;
 
     private final CustomScoreboardManager scoreboardManager;
 
     public MicroBattlesGame() {
         super("MicroBattles");
-        // TODO Ask MapManager for a map. Load it
         setupTeams();
 
         this.scoreboardManager = new CustomScoreboardManager();
 
         Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
-            // loap map
             try {
                 map = MapManager.loadMapForGame(this.getGameId(), "game-1");
             } catch (IOException e) {
@@ -75,9 +80,7 @@ public class MicroBattlesGame extends Game {
     }
 
     public int getTeamNumber(CookiePlayer player) {
-        // find the team number of the player
-        int teamNumber = teams.values().stream().mapToInt(team -> team.getPlayerCount()).min().orElse(0);
-        return teamNumber;
+        return teams.values().stream().mapToInt(team -> team.getPlayerCount()).min().orElse(0);
     }
 
     @Override
@@ -91,12 +94,8 @@ public class MicroBattlesGame extends Game {
         }
 
         spawnLocation.setWorld(gameWorld);
-
-        // Implement teleportation logic
         player.getPlayer().teleport(spawnLocation);
 
-        // Give player kit
-        // TODO: implement kit selection
         Kit kit = KitManager.getInstance().getKit("Default");
         kit.equipPlayer(player.getPlayer());
     }
@@ -105,7 +104,6 @@ public class MicroBattlesGame extends Game {
     public boolean isGameEnded() {
         return this.getState() == GameState.FINISHED;
     }
-
 
     @Override
     public int getPlayerCount() {
@@ -119,11 +117,20 @@ public class MicroBattlesGame extends Game {
         return true;
     }
 
-
     @Override
     public void tick() {
-        //super.tick(); TODO: Fix this
+        super.tick();
         updateGameInfo();
+
+        if (getState() == GameState.RUNNING) {
+            if (!wallRemoved) {
+                wallRemoveTimer++;
+                if (wallRemoveTimer >= WALL_REMOVE_DELAY_SECONDS * 20) {
+                    removeWall();
+                }
+            }
+            checkForWinner();
+        }
     }
 
     private void updateGameInfo() {
@@ -131,26 +138,27 @@ public class MicroBattlesGame extends Game {
         String countdownInfo = "";
 
         if (getState() == GameState.OPEN) {
-            gameState = "Waiting for players";
+            gameState = "game.waiting_for_players";
             if (getStartTimer() > 0) {
                 countdownInfo = "Starting in " + (START_DELAY_SECONDS - getStartTimer()) + "s";
             }
         } else if (getState() == GameState.RUNNING) {
-            gameState = "Game in progress";
+            gameState = "game.running";
+            if (!wallRemoved) {
+                countdownInfo = "Wall drops in " + (WALL_REMOVE_DELAY_SECONDS - wallRemoveTimer / 20) + "s";
+            }
         } else {
-            gameState = "Game ended";
+            gameState = "game.ended";
         }
 
         for (CookiePlayer player : getPlayers()) {
             Player bukkitPlayer = player.getPlayer();
 
-            // Update action bar
-            bukkitPlayer.sendActionBar(gameState + " " + countdownInfo);
+            bukkitPlayer.sendActionBar(LocaleManager.getMessage(gameState, player.getPlayer().locale()) + " " + countdownInfo);
 
-            // Update scoreboard
             scoreboardManager.createScoreboard(bukkitPlayer, "MicroBattles");
             scoreboardManager.updateScore(bukkitPlayer, "Game State:", 15);
-            scoreboardManager.updateScore(bukkitPlayer, gameState, 14);
+            scoreboardManager.updateScore(bukkitPlayer, LocaleManager.getMessage(gameState, player.getPlayer().locale()), 14);
             scoreboardManager.updateScore(bukkitPlayer, "", 13);
             scoreboardManager.updateScore(bukkitPlayer, "Players:", 12);
 
@@ -161,16 +169,57 @@ public class MicroBattlesGame extends Game {
         }
     }
 
+    private void removeWall() {
+        wallRemoved = true;
+        map.removeWall();
+        for (CookiePlayer player : getPlayers()) {
+            player.getPlayer().sendMessage(LocaleManager.getMessage("game.wall_removed", player.getPlayer().locale()));
+        }
+    }
+
+    private void checkForWinner() {
+        List<MicroBattlesTeam> remainingTeams = teams.values().stream()
+                .filter(team -> team.getPlayerCount() > 0)
+                .collect(Collectors.toList());
+
+        if (remainingTeams.size() == 1) {
+            MicroBattlesTeam winningTeam = remainingTeams.get(0);
+            endGame(winningTeam);
+        } else if (remainingTeams.isEmpty()) {
+            endGame(null); // Draw
+        }
+    }
+
+    private void endGame(MicroBattlesTeam winningTeam) {
+        setState(GameState.FINISHED);
+
+        String winMessage;
+        if (winningTeam != null) {
+            winMessage = "game.win_team";
+        } else {
+            winMessage = "game.draw";
+        }
+
+        for (CookiePlayer player : getPlayers()) {
+            player.getPlayer().sendMessage(LocaleManager.getMessage(winMessage, player.getPlayer().locale(), winningTeam.getName()));
+        }
+
+        Bukkit.getScheduler().runTaskLater(MicroBattles.getInstance(), () -> {
+            for (CookiePlayer player : getPlayers()) {
+                LobbyManager.teleportPlayerToLobby(player);
+            }
+            GameManager.removeGame(this);
+        }, 200L); // 10 seconds delay
+    }
+
     @Override
     public void removePlayer(CookiePlayer player) {
         super.removePlayer(player);
-        // remove from teams
         for (MicroBattlesTeam team : teams.values()) {
             team.removePlayer(player);
         }
 
-        // remove scoreboard
         scoreboardManager.removeScoreboard(player.getPlayer());
+        checkForWinner();
     }
-
 }

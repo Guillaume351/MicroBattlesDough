@@ -79,7 +79,6 @@ public class MapManager {
 
         // Recreate the game map with the world loaded
         map = new GameMap(mapName);
-        map.setWallCoordinates(getWallCoordinatesForMap(mapName), world);
 
         // Set team spawns
         List<Location> teamSpawns = getTeamSpawnsForMap(mapName, world);
@@ -101,9 +100,11 @@ public class MapManager {
     }
 
     private static GameMap initializeMapWithCoordinates(String mapName) {
-        World world = Bukkit.getWorld(mapName); // Placeholder, replace with actual way to get world instance
+
         GameMap gameMap = new GameMap(mapName);
-        gameMap.setWallCoordinates(getWallCoordinatesForMap(mapName), world);
+        World world = Bukkit.getWorld(mapName); // Placeholder, replace with actual way to get world instance
+
+        // TODO: Load wall coordinates from config
 
         // Get team spawns from config
         List<Location> teamSpawns = getTeamSpawnsForMap(mapName, world);
