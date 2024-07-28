@@ -8,12 +8,16 @@ import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.player.PlayerState;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
 
 public class InGamePlayerEventListener extends BaseEventBlocker {
 
@@ -31,19 +35,16 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
 
     @Override
     protected boolean shouldAllowBlockBreak(BlockBreakEvent event) {
-        // Allow block breaking only if the player is in a running game
         return isPlayerInGame(event.getPlayer()) && isGameRunning(event.getPlayer());
     }
 
     @Override
     protected boolean shouldAllowBlockPlace(BlockPlaceEvent event) {
-        // Allow block placing only if the player is in a running game
         return isPlayerInGame(event.getPlayer()) && isGameRunning(event.getPlayer());
     }
 
     @Override
     protected boolean shouldAllowPlayerInteract(PlayerInteractEvent event) {
-        // Allow player interaction if the player is in a game (running or not)
         return isPlayerInGame(event.getPlayer());
     }
 
@@ -52,8 +53,24 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
         if (!(event.getEntity() instanceof Player player)) {
             return true; // Allow damage to non-player entities
         }
-        // Allow damage only if the player is in a running game
-        return isPlayerInGame(player) && isGameRunning(player);
+
+        CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
+        Game game = GameManager.getGameOfPlayer(cookiePlayer);
+
+        if (!(game instanceof MicroBattlesGame microBattlesGame) || !isGameRunning(player)) {
+            return false; // Prevent damage if not in a running MicroBattlesGame
+        }
+
+        if (event instanceof EntityDamageByEntityEvent damageByEntityEvent) {
+            if (damageByEntityEvent.getDamager() instanceof Player damager) {
+                CookiePlayer damagerCookiePlayer = PlayerManager.getPlayer(damager);
+
+                // Prevent damage between players of the same team
+                return !microBattlesGame.arePlayersInSameTeam(cookiePlayer, damagerCookiePlayer);
+            }
+        }
+
+        return true;
     }
 
     @Override
@@ -61,13 +78,36 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
         if (!(event.getEntity().getShooter() instanceof Player player)) {
             return true; // Allow projectiles from non-player sources
         }
-        // Allow projectile launch only if the player is in a running game
         return isPlayerInGame(player) && isGameRunning(player);
     }
 
     @Override
     protected boolean shouldAllowPlayerDropItem(PlayerDropItemEvent event) {
-        // Prevent item dropping in all cases to avoid item loss
         return false;
+    }
+
+    @EventHandler
+    public void onPlayerMove(PlayerMoveEvent event) {
+        Player player = event.getPlayer();
+        CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
+        Game game = GameManager.getGameOfPlayer(cookiePlayer);
+
+        if (game instanceof MicroBattlesGame microBattlesGame && isGameRunning(player)) {
+            if (player.getLocation().getY() < 0) { // Adjust this value based on your map
+                microBattlesGame.handlePlayerFall(cookiePlayer);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        Player player = event.getEntity();
+        CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
+        Game game = GameManager.getGameOfPlayer(cookiePlayer);
+
+        if (game instanceof MicroBattlesGame microBattlesGame && isGameRunning(player)) {
+            event.setCancelled(true); // Prevent default death behavior
+            microBattlesGame.handlePlayerDeath(cookiePlayer);
+        }
     }
 }

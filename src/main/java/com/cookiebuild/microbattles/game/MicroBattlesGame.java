@@ -13,6 +13,7 @@ import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.map.GameMap;
 import com.cookiebuild.microbattles.map.MapManager;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -221,5 +222,51 @@ public class MicroBattlesGame extends Game {
 
         scoreboardManager.removeScoreboard(player.getPlayer());
         checkForWinner();
+    }
+
+    public boolean arePlayersInSameTeam(CookiePlayer player1, CookiePlayer player2) {
+        MicroBattlesTeam team1 = getPlayerTeam(player1);
+        MicroBattlesTeam team2 = getPlayerTeam(player2);
+        return team1 != null && team1.equals(team2);
+    }
+
+    private MicroBattlesTeam getPlayerTeam(CookiePlayer player) {
+        return teams.values().stream()
+                .filter(team -> team.getPlayers().contains(player))
+                .findFirst()
+                .orElse(null);
+    }
+
+    public void handlePlayerFall(CookiePlayer player) {
+        if (getState() == GameState.RUNNING) {
+            MicroBattlesTeam team = getPlayerTeam(player);
+            if (team != null) {
+                Location spawnLocation = map.getTeamSpawn(teams.values().stream().toList().indexOf(team));
+                World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
+                if (gameWorld != null) {
+                    spawnLocation.setWorld(gameWorld);
+                    player.getPlayer().teleport(spawnLocation);
+                }
+            }
+        }
+    }
+
+    public void handlePlayerDeath(CookiePlayer player) {
+        if (getState() == GameState.RUNNING) {
+            player.getPlayer().setGameMode(GameMode.SPECTATOR);
+
+            MicroBattlesTeam team = getPlayerTeam(player);
+            if (team != null) {
+                Location spawnLocation = map.getTeamSpawn(teams.values().stream().toList().indexOf(team));
+                World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
+                if (gameWorld != null) {
+                    spawnLocation.setWorld(gameWorld);
+                    player.getPlayer().teleport(spawnLocation);
+                }
+            }
+
+            team.removePlayer(player);
+            checkForWinner();
+        }
     }
 }

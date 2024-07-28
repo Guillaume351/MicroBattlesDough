@@ -31,6 +31,10 @@ public class MicroBattlesTeam {
         return players.size();
     }
 
+    public ArrayList<CookiePlayer> getPlayers() {
+        return players;
+    }
+
     public String getName() {
         return name;
     }
