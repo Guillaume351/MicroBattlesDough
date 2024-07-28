@@ -161,4 +161,16 @@ public class MicroBattlesGame extends Game {
         }
     }
 
+    @Override
+    public void removePlayer(CookiePlayer player) {
+        super.removePlayer(player);
+        // remove from teams
+        for (MicroBattlesTeam team : teams.values()) {
+            team.removePlayer(player);
+        }
+
+        // remove scoreboard
+        scoreboardManager.removeScoreboard(player.getPlayer());
+    }
+
 }

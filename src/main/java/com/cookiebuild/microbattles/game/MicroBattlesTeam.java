@@ -23,6 +23,10 @@ public class MicroBattlesTeam {
         return true;
     }
 
+    public void removePlayer(CookiePlayer player) {
+        players.remove(player);
+    }
+
     public int getPlayerCount() {
         return players.size();
     }
