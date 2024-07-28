@@ -154,6 +154,7 @@ public class MicroBattlesGame extends Game {
 
         for (CookiePlayer player : getPlayers()) {
             Player bukkitPlayer = player.getPlayer();
+            boolean isSpectator = bukkitPlayer.getGameMode() == GameMode.SPECTATOR;
 
             bukkitPlayer.sendActionBar(LocaleManager.getMessage(gameState, player.getPlayer().locale()) + " " + countdownInfo);
 
@@ -161,11 +162,11 @@ public class MicroBattlesGame extends Game {
             scoreboardManager.updateScore(bukkitPlayer, "Game State:", 15);
             scoreboardManager.updateScore(bukkitPlayer, LocaleManager.getMessage(gameState, player.getPlayer().locale()), 14);
             scoreboardManager.updateScore(bukkitPlayer, "", 13);
-            scoreboardManager.updateScore(bukkitPlayer, "Players:", 12);
+            scoreboardManager.updateScore(bukkitPlayer, isSpectator ? "Spectating" : "Players:", 12);
 
             int line = 11;
             for (MicroBattlesTeam team : teams.values()) {
-                scoreboardManager.updateScore(bukkitPlayer, team.getName() + ": " + team.getPlayerCount(), line--);
+                scoreboardManager.updateScore(bukkitPlayer, team.getName() + ": " + team.getPlayers().stream().filter(p -> p.getPlayer().getGameMode() != GameMode.SPECTATOR).count(), line--);
             }
         }
     }
@@ -181,6 +182,7 @@ public class MicroBattlesGame extends Game {
     private void checkForWinner() {
         List<MicroBattlesTeam> remainingTeams = teams.values().stream()
                 .filter(team -> team.getPlayerCount() > 0)
+                .filter(team -> team.getPlayers().stream().anyMatch(p -> p.getPlayer().getGameMode() != GameMode.SPECTATOR))
                 .collect(Collectors.toList());
 
         if (remainingTeams.size() == 1) {
@@ -257,6 +259,7 @@ public class MicroBattlesGame extends Game {
 
             MicroBattlesTeam team = getPlayerTeam(player);
             if (team != null) {
+                team.removePlayer(player);
                 Location spawnLocation = map.getTeamSpawn(teams.values().stream().toList().indexOf(team));
                 World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
                 if (gameWorld != null) {
@@ -265,7 +268,6 @@ public class MicroBattlesGame extends Game {
                 }
             }
 
-            team.removePlayer(player);
             checkForWinner();
         }
     }

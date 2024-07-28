@@ -7,6 +7,7 @@ import com.cookiebuild.cookiedough.player.CookiePlayer;
 import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.player.PlayerState;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
+import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -65,8 +66,9 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
             if (damageByEntityEvent.getDamager() instanceof Player damager) {
                 CookiePlayer damagerCookiePlayer = PlayerManager.getPlayer(damager);
 
-                // Prevent damage between players of the same team
-                return !microBattlesGame.arePlayersInSameTeam(cookiePlayer, damagerCookiePlayer);
+                // Prevent damage from spectators or between players of the same team
+                return damager.getGameMode() != GameMode.SPECTATOR &&
+                        !microBattlesGame.arePlayersInSameTeam(cookiePlayer, damagerCookiePlayer);
             }
         }
 
@@ -108,6 +110,14 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
         if (game instanceof MicroBattlesGame microBattlesGame && isGameRunning(player)) {
             event.setCancelled(true); // Prevent default death behavior
             microBattlesGame.handlePlayerDeath(cookiePlayer);
+        }
+    }
+
+    @EventHandler
+    public void onSpectatorInteract(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        if (isPlayerInGame(player) && player.getGameMode() == GameMode.SPECTATOR) {
+            event.setCancelled(true);
         }
     }
 }
