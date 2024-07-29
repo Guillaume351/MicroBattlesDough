@@ -4,6 +4,7 @@ import com.cookiebuild.cookiedough.CookieDough;
 import com.cookiebuild.cookiedough.utils.FileUtils;
 import com.cookiebuild.cookiedough.utils.ZipUtils;
 import com.cookiebuild.microbattles.MicroBattles;
+import com.cookiebuild.microbattles.listener.InGamePlayerEventListener;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -16,6 +17,8 @@ import java.io.IOException;
 import java.util.*;
 
 public class MapManager {
+
+    public static InGamePlayerEventListener inGamePlayerEventListener;
 
     private static final Map<String, GameMap> maps = new HashMap<>();
 
@@ -86,6 +89,8 @@ public class MapManager {
             map.setTeamSpawn(i, teamSpawns.get(i));
         }
 
+        inGamePlayerEventListener.addProtectedWorld(world.getName());
+
         return map;
     }
 
@@ -145,5 +150,10 @@ public class MapManager {
         public ChunkData generateChunkData(World world, Random random, int x, int z, BiomeGrid biome) {
             return createChunkData(world);
         }
+    }
+
+    public static String getRandomMapName() {
+        ArrayList<String> mapNames = new ArrayList<>(maps.keySet());
+        return mapNames.get(new Random().nextInt(mapNames.size()));
     }
 }

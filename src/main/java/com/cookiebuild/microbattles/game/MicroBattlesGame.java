@@ -43,7 +43,7 @@ public class MicroBattlesGame extends Game {
 
         Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
             try {
-                map = MapManager.loadMapForGame(this.getGameId(), "game-1");
+                map = MapManager.loadMapForGame(this.getGameId(), "game-1");//MapManager.getRandomMapName());
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -270,5 +270,10 @@ public class MicroBattlesGame extends Game {
 
             checkForWinner();
         }
+    }
+
+    public void respawnPlayerToTeamSpawn(CookiePlayer player) {
+        Location spawnLocation = map.getTeamSpawn(getTeamNumber(player));
+        player.getPlayer().teleport(spawnLocation);
     }
 }

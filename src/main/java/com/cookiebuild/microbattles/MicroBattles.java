@@ -25,10 +25,12 @@ public class MicroBattles extends JavaPlugin {
         instance = this;
         saveResource("config.yml", false);
 
+        InGamePlayerEventListener inGamePlayerEventListener = new InGamePlayerEventListener();
+        MapManager.inGamePlayerEventListener = inGamePlayerEventListener;
         MapManager.loadGameMaps();
 
         MicroBattles.registerNewGame();
 
-        getServer().getPluginManager().registerEvents(new InGamePlayerEventListener(), this);
+        getServer().getPluginManager().registerEvents(inGamePlayerEventListener, this);
     }
 }

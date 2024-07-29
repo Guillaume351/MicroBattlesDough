@@ -20,7 +20,22 @@ import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 
+import java.util.ArrayList;
+
 public class InGamePlayerEventListener extends BaseEventBlocker {
+
+    public InGamePlayerEventListener() {
+        protectedWorlds = new ArrayList<>();
+    }
+
+
+    public void addProtectedWorld(String worldName) {
+        protectedWorlds.add(worldName);
+    }
+
+    public void removeProtectedWorld(String worldName) {
+        protectedWorlds.remove(worldName);
+    }
 
     private boolean isPlayerInGame(Player player) {
         CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
@@ -94,9 +109,14 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
         CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
         Game game = GameManager.getGameOfPlayer(cookiePlayer);
 
-        if (game instanceof MicroBattlesGame microBattlesGame && isGameRunning(player)) {
+        if (game instanceof MicroBattlesGame microBattlesGame) {
             if (player.getLocation().getY() < 0) { // Adjust this value based on your map
-                microBattlesGame.handlePlayerFall(cookiePlayer);
+                if (isGameRunning(player)) {
+                    microBattlesGame.handlePlayerFall(cookiePlayer);
+                } else {
+                    // Respawn player to team spawn even if game hasn't started
+                    microBattlesGame.respawnPlayerToTeamSpawn(cookiePlayer);
+                }
             }
         }
     }
