@@ -223,7 +223,9 @@ public class MicroBattlesGame extends Game {
         }
 
         scoreboardManager.removeScoreboard(player.getPlayer());
-        checkForWinner();
+        if (getState() == GameState.RUNNING) {
+            checkForWinner();
+        }
     }
 
     public boolean arePlayersInSameTeam(CookiePlayer player1, CookiePlayer player2) {
