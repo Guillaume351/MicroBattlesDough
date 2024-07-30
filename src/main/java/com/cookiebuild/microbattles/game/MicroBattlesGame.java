@@ -81,7 +81,8 @@ public class MicroBattlesGame extends Game {
     }
 
     public int getTeamNumber(CookiePlayer player) {
-        return teams.values().stream().mapToInt(team -> team.getPlayerCount()).min().orElse(0);
+        MicroBattlesTeam team = teams.values().stream().filter(t -> t.getPlayers().contains(player)).findFirst().orElse(null);
+        return team != null ? teams.values().stream().toList().indexOf(team) : -1;
     }
 
     @Override
