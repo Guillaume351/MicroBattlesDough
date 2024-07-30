@@ -104,8 +104,16 @@ public class MicroBattlesGame extends Game {
         spawnLocation.setWorld(gameWorld);
         player.getPlayer().teleport(spawnLocation);
 
-        Kit kit = KitManager.getInstance().getKit("Default");
-        kit.equipPlayer(player.getPlayer());
+        if (this.getState() != GameState.RUNNING) {
+            Kit kit = KitManager.getInstance().getRandomKit();
+            kit.equipPlayer(player.getPlayer());
+            // Inform the player about their kit
+            player.getPlayer().sendMessage("§aYou have been given the §6" + kit.getName() + " §akit!");
+            player.getPlayer().sendTitle("§6" + kit.getName(), "§aKit assigned!", 10, 70, 20);
+
+        }
+
+
     }
 
     @Override

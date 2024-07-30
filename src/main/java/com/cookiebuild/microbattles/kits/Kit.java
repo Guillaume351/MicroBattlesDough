@@ -1,6 +1,7 @@
 package com.cookiebuild.microbattles.kits;
 
 import org.bukkit.Material;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
@@ -22,6 +23,12 @@ public class Kit {
 
     public void addItem(Material material, int amount) {
         items.add(new ItemStack(material, amount));
+    }
+
+    public void addItem(Material material, int amount, Enchantment enchantment, int level) {
+        ItemStack item = new ItemStack(material, amount);
+        item.addEnchantment(enchantment, level);
+        items.add(item);
     }
 
     public void setArmor(Material helmet, Material chestplate, Material leggings, Material boots) {
