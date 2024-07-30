@@ -32,6 +32,7 @@ public class MicroBattlesGame extends Game {
     private static final int WALL_REMOVE_DELAY_SECONDS = 15;
     private int wallRemoveTimer = 0;
     private boolean wallRemoved = false;
+    private int[] wallCoordinates;
 
     private final CustomScoreboardManager scoreboardManager;
 
@@ -44,6 +45,11 @@ public class MicroBattlesGame extends Game {
         Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
             try {
                 map = MapManager.loadMapForGame(this.getGameId(), "game-1");//MapManager.getRandomMapName());
+                this.wallCoordinates = MapManager.getWallCoordinatesForMap(map.getName());
+                World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
+                if (gameWorld != null) {
+                    map.identifyWallBlocks(gameWorld, wallCoordinates);
+                }
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

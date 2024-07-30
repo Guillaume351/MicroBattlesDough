@@ -140,7 +140,7 @@ public class MapManager {
         return teamSpawns;
     }
 
-    private static int[] getWallCoordinatesForMap(String mapName) {
+    public static int[] getWallCoordinatesForMap(String mapName) {
         int mapNumber = Integer.parseInt(mapName.replace("game-", ""));
         return WALL_COORDINATES[mapNumber - 1];
     }
