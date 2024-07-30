@@ -28,7 +28,7 @@ public class MicroBattlesGame extends Game {
     private GameMap map;
     private final HashMap<String, MicroBattlesTeam> teams = new HashMap<>();
 
-    private static final int START_DELAY_SECONDS = 10;
+
     private static final int WALL_REMOVE_DELAY_SECONDS = 15;
     private int wallRemoveTimer = 0;
     private boolean wallRemoved = false;
@@ -133,7 +133,7 @@ public class MicroBattlesGame extends Game {
         if (getState() == GameState.RUNNING) {
             if (!wallRemoved) {
                 wallRemoveTimer++;
-                if (wallRemoveTimer >= WALL_REMOVE_DELAY_SECONDS * 20) {
+                if (wallRemoveTimer >= WALL_REMOVE_DELAY_SECONDS) {
                     removeWall();
                 }
             }
@@ -148,12 +148,13 @@ public class MicroBattlesGame extends Game {
         if (getState() == GameState.OPEN) {
             gameState = "game.waiting_for_players";
             if (getStartTimer() > 0) {
+                gameState = "";
                 countdownInfo = "Starting in " + (START_DELAY_SECONDS - getStartTimer()) + "s";
             }
         } else if (getState() == GameState.RUNNING) {
             gameState = "game.running";
             if (!wallRemoved) {
-                countdownInfo = "Wall drops in " + (WALL_REMOVE_DELAY_SECONDS - wallRemoveTimer / 20) + "s";
+                countdownInfo = "Wall drops in " + (WALL_REMOVE_DELAY_SECONDS - wallRemoveTimer) + "s";
             }
         } else {
             gameState = "game.ended";
@@ -212,6 +213,7 @@ public class MicroBattlesGame extends Game {
 
         for (CookiePlayer player : getPlayers()) {
             player.getPlayer().sendMessage(LocaleManager.getMessage(winMessage, player.getPlayer().locale(), winningTeam.getName()));
+            player.getPlayer().sendTitle(LocaleManager.getMessage(winMessage, player.getPlayer().locale(), winningTeam.getName()), null, 20, 40, 20);
         }
 
         Bukkit.getScheduler().runTaskLater(MicroBattles.getInstance(), () -> {
@@ -248,8 +250,53 @@ public class MicroBattlesGame extends Game {
                 .orElse(null);
     }
 
+    public String getPlayerTeamColor(CookiePlayer player) {
+        MicroBattlesTeam team = getPlayerTeam(player);
+        if (team != null) {
+            return team.getName();
+        }
+        return null;
+    }
+
+    public void updatePlayerNameColor(CookiePlayer player) {
+        String teamColor = getPlayerTeamColor(player);
+        if (teamColor != null) {
+            String colorCode = getColorCode(teamColor);
+            // Use your scoreboard API to set the player's name color
+            // For example:
+            // scoreboardAPI.setPlayerNameColor(player.getPlayer(), colorCode + player.getPlayer().getName());
+            if (colorCode != null) {
+                player.getPlayer().setDisplayName(colorCode + player.getPlayer().getName());
+            }
+        }
+    }
+
+    private String getColorCode(String teamColor) {
+        switch (teamColor.toLowerCase()) {
+            case "red":
+                return "§c";
+            case "blue":
+                return "§9";
+            case "yellow":
+                return "§e";
+            case "green":
+                return "§a";
+            default:
+                return "§f";
+        }
+    }
+
+    public String getColoredPlayerName(CookiePlayer player) {
+        String teamColor = getPlayerTeamColor(player);
+        if (teamColor != null) {
+            String colorCode = getColorCode(teamColor);
+            return colorCode + player.getPlayer().getName() + "§r";
+        }
+        return player.getPlayer().getName();
+    }
+
     public void handlePlayerFall(CookiePlayer player) {
-        if (getState() == GameState.RUNNING) {
+        if (getState() != GameState.RUNNING) {
             MicroBattlesTeam team = getPlayerTeam(player);
             if (team != null) {
                 Location spawnLocation = map.getTeamSpawn(teams.values().stream().toList().indexOf(team));
@@ -265,6 +312,9 @@ public class MicroBattlesGame extends Game {
     public void handlePlayerDeath(CookiePlayer player) {
         if (getState() == GameState.RUNNING) {
             player.getPlayer().setGameMode(GameMode.SPECTATOR);
+            // Send message to tell the player they died and are spectating
+            player.getPlayer().sendMessage(LocaleManager.getMessage("game.player_died", player.getPlayer().locale()));
+            player.getPlayer().sendTitle(LocaleManager.getMessage("game.now_spectating", player.getPlayer().locale()), null, 20, 40, 20);
 
             MicroBattlesTeam team = getPlayerTeam(player);
             if (team != null) {

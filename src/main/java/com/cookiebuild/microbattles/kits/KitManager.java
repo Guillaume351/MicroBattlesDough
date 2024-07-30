@@ -22,7 +22,10 @@ public class KitManager {
         Kit defaultKit = new Kit("Default");
         defaultKit.addItem(Material.STONE_SWORD, 1);
         defaultKit.addItem(Material.BOW, 1);
+        defaultKit.addItem(Material.GOLDEN_PICKAXE, 1);
         defaultKit.addItem(Material.ARROW, 32);
+        // give carrot
+        defaultKit.addItem(Material.CARROT, 3);
         defaultKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
         kits.add(defaultKit);
     }

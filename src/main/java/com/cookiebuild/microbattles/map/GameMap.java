@@ -1,8 +1,6 @@
 package com.cookiebuild.microbattles.map;
 
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 
 import java.util.ArrayList;
@@ -49,8 +47,27 @@ public class GameMap {
         }
     }
 
+    public List<Block> getAllGlassPanes() {
+        Chunk[] chunks = Bukkit.getWorld(name).getLoadedChunks();
+        List<Block> blocks = new ArrayList<>();
+        for (Chunk chunk : chunks) {
+            // iterate over all blocks in the chunk
+            for (int x = 0; x < 16; x++) {
+                for (int z = 0; z < 16; z++) {
+                    for (int y = 0; y < 256; y++) {
+                        Block block = chunk.getBlock(x, y, z);
+                        if (block.getType() == Material.GLASS_PANE) {
+                            blocks.add(block);
+                        }
+                    }
+                }
+            }
+        }
+        return blocks;
+    }
+
     public void removeWall() {
-        for (Block block : wallBlocks) {
+        for (Block block : getAllGlassPanes()) { // TODO: replace temporary wall removal with a more efficient method
             block.setType(Material.AIR);
         }
         wallBlocks.clear();

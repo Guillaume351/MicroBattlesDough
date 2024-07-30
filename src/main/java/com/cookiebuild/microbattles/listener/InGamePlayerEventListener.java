@@ -8,6 +8,7 @@ import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.player.PlayerState;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
 import org.bukkit.GameMode;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -129,6 +130,16 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
 
         if (game instanceof MicroBattlesGame microBattlesGame && isGameRunning(player)) {
             event.setCancelled(true); // Prevent default death behavior
+
+            // Check if the player was killed by another player
+            Player killer = player.getKiller();
+            if (killer != null) {
+                // Send a message to the killer
+                killer.sendMessage("§aYou killed " + player.getName() + "!");
+                // play a sound to the killer
+                killer.playSound(killer.getLocation(), Sound.ENTITY_PLAYER_DEATH, 1, 1);
+            }
+
             microBattlesGame.handlePlayerDeath(cookiePlayer);
         }
     }

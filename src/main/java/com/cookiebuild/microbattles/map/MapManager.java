@@ -81,7 +81,7 @@ public class MapManager {
         FileUtils.copyDirectory(gameMapDir, worldFolder);
 
         // Recreate the game map with the world loaded
-        map = new GameMap(mapName);
+        map = new GameMap("game_maps/" + gameUUID);
 
         // Set team spawns
         List<Location> teamSpawns = getTeamSpawnsForMap(mapName, world);
