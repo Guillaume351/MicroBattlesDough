@@ -3,6 +3,7 @@ package com.cookiebuild.microbattles;
 import com.cookiebuild.cookiedough.game.GameManager;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
 import com.cookiebuild.microbattles.listener.InGamePlayerEventListener;
+import com.cookiebuild.microbattles.listener.KitEffectListener;
 import com.cookiebuild.microbattles.map.MapManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -32,5 +33,6 @@ public class MicroBattles extends JavaPlugin {
         MicroBattles.registerNewGame();
 
         getServer().getPluginManager().registerEvents(inGamePlayerEventListener, this);
+        getServer().getPluginManager().registerEvents(new KitEffectListener(), this);
     }
 }

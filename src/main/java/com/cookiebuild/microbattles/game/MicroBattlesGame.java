@@ -28,6 +28,8 @@ public class MicroBattlesGame extends Game {
     private GameMap map;
     private final HashMap<String, MicroBattlesTeam> teams = new HashMap<>();
 
+    // store player's kits
+    private final HashMap<String, Kit> kits = new HashMap<>();
 
     private static final int WALL_REMOVE_DELAY_SECONDS = 15;
     private int wallRemoveTimer = 0;
@@ -111,10 +113,18 @@ public class MicroBattlesGame extends Game {
             player.getPlayer().sendMessage("§aYou have been given the §6" + kit.getName() + " §akit!");
             player.getPlayer().sendTitle("§6" + kit.getName(), "§aKit assigned!", 10, 70, 20);
 
+            // store player's kit
+            kits.put(player.getPlayer().getUniqueId().toString(), kit);
         }
 
 
     }
+
+    // function to ask which kit the player has
+    public Kit getKit(CookiePlayer player) {
+        return kits.get(player.getPlayer().getUniqueId().toString());
+    }
+
 
     @Override
     public boolean isGameEnded() {

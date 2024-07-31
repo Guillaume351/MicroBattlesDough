@@ -8,15 +8,15 @@ import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.player.PlayerState;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
 import org.bukkit.GameMode;
-import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.Sound;
-import org.bukkit.entity.Arrow;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.entity.*;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
@@ -117,22 +117,6 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
                 } else {
                     // Respawn player to team spawn even if game hasn't started
                     microBattlesGame.respawnPlayerToTeamSpawn(cookiePlayer);
-                }
-            }
-        }
-    }
-
-    @EventHandler
-    public void onProjectileHit(ProjectileHitEvent event) {
-        if (event.getEntity() instanceof Arrow && event.getEntity().getShooter() instanceof Player shooter) {
-            CookiePlayer cookiePlayer = PlayerManager.getPlayer(shooter);
-            Game game = GameManager.getGameOfPlayer(cookiePlayer);
-
-            if (game instanceof MicroBattlesGame && isGameRunning(shooter)) {
-                // Check if the shooter has the Explosive Archer kit
-                if (shooter.getInventory().contains(Material.TNT)) {
-                    Location loc = event.getEntity().getLocation();
-                    loc.getWorld().createExplosion(loc, 1.0F, true, true);
                 }
             }
         }
