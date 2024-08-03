@@ -1,10 +1,13 @@
 package com.cookiebuild.microbattles.map;
 
+import com.cookiebuild.cookiedough.CookieDough;
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public class GameMap {
     private final String name;
@@ -67,9 +70,26 @@ public class GameMap {
     }
 
     public void removeWall() {
-        for (Block block : getAllGlassPanes()) { // TODO: replace temporary wall removal with a more efficient method
-            block.setType(Material.AIR);
-        }
-        wallBlocks.clear();
+        CompletableFuture.runAsync(() -> {
+            List<Block> glassBlocks = getAllGlassPanes();
+
+            new BukkitRunnable() {
+                private final int batchSize = 100;
+                private int index = 0;
+
+                @Override
+                public void run() {
+                    for (int i = 0; i < batchSize && index < glassBlocks.size(); i++, index++) {
+                        Block block = glassBlocks.get(index);
+                        block.setType(Material.AIR);
+                    }
+
+                    if (index >= glassBlocks.size()) {
+                        this.cancel();
+                        wallBlocks.clear();
+                    }
+                }
+            }.runTaskTimer(CookieDough.getInstance(), 0L, 1L);
+        });
     }
 }

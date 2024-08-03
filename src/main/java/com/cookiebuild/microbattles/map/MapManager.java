@@ -72,7 +72,7 @@ public class MapManager {
             throw new IOException("Failed to create world: " + worldName);
         }
 
-        CookieDough.getInstance().getLogger().info("Created world " + world.getName());
+        CookieDough.getInstance().getLogger().info("Created world " + world.getName() + " base on map " + mapName);
         world.setAutoSave(false);
         world.setThundering(false);
 

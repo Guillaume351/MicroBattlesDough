@@ -46,8 +46,9 @@ public class MicroBattlesGame extends Game {
 
         Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
             try {
-                map = MapManager.loadMapForGame(this.getGameId(), "game-1");//MapManager.getRandomMapName());
-                this.wallCoordinates = MapManager.getWallCoordinatesForMap(map.getName());
+                String randomMapName = MapManager.getRandomMapName();
+                map = MapManager.loadMapForGame(this.getGameId(), randomMapName);
+                this.wallCoordinates = MapManager.getWallCoordinatesForMap(randomMapName);
                 World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
                 if (gameWorld != null) {
                     map.identifyWallBlocks(gameWorld, wallCoordinates);
