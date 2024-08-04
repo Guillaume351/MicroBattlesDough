@@ -1,8 +1,9 @@
 package com.cookiebuild.microbattles.kits;
 
+import com.cookiebuild.cookiedough.utils.PotionUtil;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffectType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -92,7 +93,7 @@ public class KitManager {
         Kit ninjaKit = new Kit("Ninja");
         ninjaKit.addItem(Material.IRON_SWORD, 1, Enchantment.SHARPNESS, 2);
         ninjaKit.addItem(Material.ENDER_PEARL, 3);
-        ninjaKit.addItem(Material.POTION, 1); // Speed potion
+        ninjaKit.addItemStack(PotionUtil.createPotion(PotionEffectType.SPEED, 3600, 0), 1); // 3 minutes of Speed I
         ninjaKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
         kits.add(ninjaKit);
     }
@@ -125,8 +126,8 @@ public class KitManager {
 
     private void createChemistKit() {
         Kit chemistKit = new Kit("Chemist");
-        chemistKit.addItem(Material.SPLASH_POTION, 3); // Harming potions
-        chemistKit.addItem(Material.LINGERING_POTION, 2); // Poison potions
+        chemistKit.addItemStack(PotionUtil.createSplashPotion(PotionEffectType.INSTANT_DAMAGE, 1, 0), 3); // Instant Damage I
+        chemistKit.addItemStack(PotionUtil.createLingeringPotion(PotionEffectType.POISON, 200, 0), 2); // Poison I for 10 seconds
         chemistKit.addItem(Material.WOODEN_SWORD, 1);
         chemistKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
         kits.add(chemistKit);
@@ -136,13 +137,7 @@ public class KitManager {
         Kit assassinKit = new Kit("Assassin");
         assassinKit.addItem(Material.IRON_SWORD, 1, Enchantment.SHARPNESS, 1);
         assassinKit.addItem(Material.ENDER_PEARL, 2);
-
-        // create invisible potion
-
-
-        ItemStack invisiblePotion = new ItemStack(Material.POTION, 1);
-
-
+        assassinKit.addItemStack(PotionUtil.createPotion(PotionEffectType.INVISIBILITY, 1200, 0)); // Invisibility for 1 minute
         assassinKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
         kits.add(assassinKit);
     }
@@ -160,7 +155,7 @@ public class KitManager {
         Kit vampireKit = new Kit("Vampire");
         vampireKit.addItem(Material.IRON_SWORD, 1);
         vampireKit.addItem(Material.REDSTONE, 16); // Represents blood
-        vampireKit.addItem(Material.POTION, 1); // Regeneration potion
+        vampireKit.addItemStack(PotionUtil.createPotion(PotionEffectType.REGENERATION, 600, 0), 1);// Regeneration I for 30 seconds
         vampireKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
         kits.add(vampireKit);
     }

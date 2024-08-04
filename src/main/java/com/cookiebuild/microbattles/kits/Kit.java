@@ -31,6 +31,12 @@ public class Kit {
         items.add(item);
     }
 
+    public void addItemStack(ItemStack item, int amount) {
+        for (int i = 0; i < amount; i++) {
+            items.add(item);
+        }
+    }
+
     public void setArmor(Material helmet, Material chestplate, Material leggings, Material boots) {
         this.helmet = new ItemStack(helmet);
         this.chestplate = new ItemStack(chestplate);
