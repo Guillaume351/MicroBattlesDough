@@ -8,10 +8,12 @@ import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.player.PlayerState;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
 import org.bukkit.GameMode;
+import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockIgniteEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
@@ -75,6 +77,7 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
         Game game = GameManager.getGameOfPlayer(cookiePlayer);
 
         if (!(game instanceof MicroBattlesGame microBattlesGame) || !isGameRunning(player)) {
+            player.setFireTicks(0);
             return false; // Prevent damage if not in a running MicroBattlesGame
         }
 
@@ -149,6 +152,21 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
     public void onSpectatorInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
         if (isPlayerInGame(player) && player.getGameMode() == GameMode.SPECTATOR) {
+            event.setCancelled(true);
+        }
+    }
+
+
+    @EventHandler
+    public void onFireSpread(BlockIgniteEvent event) {
+        if (isPlayerInGame(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent event) {
+        if (event.getBlock().getType() == Material.GLASS_PANE) {
             event.setCancelled(true);
         }
     }
