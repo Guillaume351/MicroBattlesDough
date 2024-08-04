@@ -231,16 +231,31 @@ public class MicroBattlesGame extends Game {
         }
 
         for (CookiePlayer player : getPlayers()) {
-            player.getPlayer().sendMessage(LocaleManager.getMessage(winMessage, player.getPlayer().locale(), winningTeam.getName()));
-            player.getPlayer().sendTitle(LocaleManager.getMessage(winMessage, player.getPlayer().locale(), winningTeam.getName()), null, 20, 40, 20);
+            player.getPlayer().sendMessage(LocaleManager.getMessage(winMessage, player.getPlayer().locale(), winningTeam != null ? winningTeam.getName() : ""));
+            player.getPlayer().sendTitle(LocaleManager.getMessage(winMessage, player.getPlayer().locale(), winningTeam != null ? winningTeam.getName() : ""), null, 20, 40, 20);
         }
 
-        Bukkit.getScheduler().runTaskLater(MicroBattles.getInstance(), () -> {
-            for (CookiePlayer player : getPlayers()) {
-                LobbyManager.teleportPlayerToLobby(player);
+        // Start a countdown timer
+        int teleportDelay = 10; // 10 seconds delay
+        Bukkit.getScheduler().runTaskTimer(MicroBattles.getInstance(), new Runnable() {
+            int timeLeft = teleportDelay;
+
+            @Override
+            public void run() {
+                if (timeLeft > 0) {
+                    for (CookiePlayer player : getPlayers()) {
+                        player.getPlayer().sendActionBar(LocaleManager.getMessage("game.teleport_countdown", player.getPlayer().locale(), String.valueOf(timeLeft)));
+                    }
+                    timeLeft--;
+                } else {
+                    for (CookiePlayer player : getPlayers()) {
+                        LobbyManager.teleportPlayerToLobby(player);
+                    }
+                    GameManager.removeGame(MicroBattlesGame.this);
+                    Bukkit.getScheduler().cancelTasks(MicroBattles.getInstance());
+                }
             }
-            GameManager.removeGame(this);
-        }, 200L); // 10 seconds delay
+        }, 0L, 20L); // Run every second
     }
 
     @Override
