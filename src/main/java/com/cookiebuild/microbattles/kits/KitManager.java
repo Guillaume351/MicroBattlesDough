@@ -137,7 +137,7 @@ public class KitManager {
         Kit assassinKit = new Kit("Assassin");
         assassinKit.addItem(Material.IRON_SWORD, 1, Enchantment.SHARPNESS, 1);
         assassinKit.addItem(Material.ENDER_PEARL, 2);
-        assassinKit.addItemStack(PotionUtil.createPotion(PotionEffectType.INVISIBILITY, 1200, 0)); // Invisibility for 1 minute
+        assassinKit.addItemStack(PotionUtil.createPotion(PotionEffectType.INVISIBILITY, 1200, 0), 1); // Invisibility for 1 minute
         assassinKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
         kits.add(assassinKit);
     }
