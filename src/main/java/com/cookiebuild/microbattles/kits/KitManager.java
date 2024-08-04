@@ -100,7 +100,7 @@ public class KitManager {
 
     private void createPyromancerKit() {
         Kit pyromancerKit = new Kit("Pyromancer");
-        pyromancerKit.addItem(Material.FIRE_CHARGE, 16);
+        pyromancerKit.addItem(Material.FIRE_CHARGE, 8);
         pyromancerKit.addItem(Material.FLINT_AND_STEEL, 1);
         pyromancerKit.addItem(Material.BLAZE_ROD, 1);
         pyromancerKit.setArmor(Material.GOLDEN_HELMET, Material.GOLDEN_CHESTPLATE, Material.GOLDEN_LEGGINGS, Material.GOLDEN_BOOTS);
@@ -154,7 +154,7 @@ public class KitManager {
     private void createVampireKit() {
         Kit vampireKit = new Kit("Vampire");
         vampireKit.addItem(Material.IRON_SWORD, 1);
-        vampireKit.addItem(Material.REDSTONE, 16); // Represents blood
+        vampireKit.addItem(Material.REDSTONE, 8); // Represents blood
         vampireKit.addItemStack(PotionUtil.createPotion(PotionEffectType.REGENERATION, 600, 0), 1);// Regeneration I for 30 seconds
         vampireKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
         kits.add(vampireKit);
@@ -163,7 +163,7 @@ public class KitManager {
     private void createFrostMageKit() {
         Kit frostMageKit = new Kit("Frost Mage");
         frostMageKit.addItem(Material.DIAMOND_HOE, 1); // Ice wand
-        frostMageKit.addItem(Material.SNOWBALL, 16);
+        frostMageKit.addItem(Material.SNOWBALL, 8);
         frostMageKit.addItem(Material.PACKED_ICE, 32);
         frostMageKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
         kits.add(frostMageKit);
@@ -192,7 +192,6 @@ public class KitManager {
         alchemistKit.addItem(Material.BREWING_STAND, 1);
         alchemistKit.addItem(Material.BLAZE_POWDER, 16);
         alchemistKit.addItem(Material.NETHER_WART, 16);
-        alchemistKit.addItem(Material.GLASS_BOTTLE, 8);
         alchemistKit.setArmor(Material.GOLDEN_HELMET, Material.GOLDEN_CHESTPLATE, Material.GOLDEN_LEGGINGS, Material.GOLDEN_BOOTS);
         kits.add(alchemistKit);
     }
