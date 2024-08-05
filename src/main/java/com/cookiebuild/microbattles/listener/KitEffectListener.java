@@ -118,7 +118,7 @@ public class KitEffectListener implements Listener {
         Vector direction = player.getLocation().getDirection().setY(0).normalize();
         Vector perpendicular = new Vector(-direction.getZ(), 0, direction.getX()).normalize();
 
-        for (int length = 0; length < 6; length++) {
+        for (int length = 0; length < 8; length++) {
             for (int width = -1; width <= 1; width++) {
                 Location bridgeLoc = startLoc.clone().add(direction.clone().multiply(length)).add(perpendicular.clone().multiply(width));
 
@@ -156,12 +156,26 @@ public class KitEffectListener implements Listener {
             double angle = 2 * Math.PI * i / 16;
             Location loc = center.clone().add(2 * Math.cos(angle), 0, 2 * Math.sin(angle));
             loc.getBlock().setType(Material.FIRE);
-            Bukkit.getScheduler().runTaskLater(player.getServer().getPluginManager().getPlugin("MicroBattles"), () -> {
+        }
+
+        // Give fire immunity to the player
+        player.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 120, 0));
+
+        // Schedule task to remove fire and fire resistance
+        Bukkit.getScheduler().runTaskLater(player.getServer().getPluginManager().getPlugin("MicroBattles"), () -> {
+            // Remove fire
+            for (int i = 0; i < 16; i++) {
+                double angle = 2 * Math.PI * i / 16;
+                Location loc = center.clone().add(2 * Math.cos(angle), 0, 2 * Math.sin(angle));
                 if (loc.getBlock().getType() == Material.FIRE) {
                     loc.getBlock().setType(Material.AIR);
                 }
-            }, 100);
-        }
+            }
+
+            // Remove fire resistance from the player
+            player.removePotionEffect(PotionEffectType.FIRE_RESISTANCE);
+            player.setFireTicks(0);
+        }, 20 * 8);
     }
 
     private void brewRandomPotion(Player player) {
