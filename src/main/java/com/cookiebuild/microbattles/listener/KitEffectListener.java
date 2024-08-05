@@ -18,6 +18,7 @@ import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.util.Vector;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -113,22 +114,38 @@ public class KitEffectListener implements Listener {
     private void castIceSpell(Player player) {
         if (!checkCooldown(player, "ice_spell", 10)) return;
 
-        Location center = player.getLocation();
-        for (int x = -1; x <= 1; x++) {
-            for (int z = -1; z <= 1; z++) {
-                Location loc = center.clone().add(x, -1, z);
-                loc.getBlock().setType(Material.PACKED_ICE);
+        Location startLoc = player.getLocation();
+        Vector direction = player.getLocation().getDirection().setY(0).normalize();
+        Vector perpendicular = new Vector(-direction.getZ(), 0, direction.getX()).normalize();
+
+        for (int length = 0; length < 6; length++) {
+            for (int width = -1; width <= 1; width++) {
+                Location bridgeLoc = startLoc.clone().add(direction.clone().multiply(length)).add(perpendicular.clone().multiply(width));
+
+                // Ensure the bridge is placed at foot level
+                bridgeLoc.setY(bridgeLoc.getBlockY() - 1);
+
+                Material originalMaterial = bridgeLoc.getBlock().getType();
+                bridgeLoc.getBlock().setType(Material.PACKED_ICE);
+
+                // Schedule the ice to revert to the original block after 5 seconds (100 ticks)
                 Bukkit.getScheduler().runTaskLater(player.getServer().getPluginManager().getPlugin("MicroBattles"), () -> {
-                    loc.getBlock().setType(Material.AIR);
+                    if (bridgeLoc.getBlock().getType() == Material.PACKED_ICE) {
+                        bridgeLoc.getBlock().setType(originalMaterial);
+                    }
                 }, 100);
             }
         }
 
-        for (Entity entity : player.getNearbyEntities(3, 2, 3)) {
-            if (entity instanceof Player) {
+        // Apply slowness effect to nearby players
+        for (Entity entity : player.getNearbyEntities(6, 2, 6)) {
+            if (entity instanceof Player && !entity.equals(player)) {
                 ((Player) entity).addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 100, 1));
             }
         }
+
+        // Play a sound effect
+        player.getWorld().playSound(player.getLocation(), Sound.BLOCK_GLASS_BREAK, 1.0f, 1.0f);
     }
 
     private void createFireRing(Player player) {
@@ -148,7 +165,7 @@ public class KitEffectListener implements Listener {
     }
 
     private void brewRandomPotion(Player player) {
-        if (!checkCooldown(player, "brew_potion", 30)) return;
+        if (!checkCooldown(player, "brew_potion", 15)) return;
 
         PotionEffectType[] potionTypes = {PotionEffectType.SPEED, PotionEffectType.STRENGTH, PotionEffectType.REGENERATION};
         PotionEffectType randomEffect = potionTypes[new Random().nextInt(potionTypes.length)];

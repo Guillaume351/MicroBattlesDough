@@ -159,14 +159,16 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
 
     @EventHandler
     public void onFireSpread(BlockIgniteEvent event) {
-        if (isPlayerInGame(event.getPlayer())) {
+        // game must be running
+        if (!isPlayerInGame(event.getPlayer()) || !isGameRunning(event.getPlayer())) {
             event.setCancelled(true);
         }
     }
 
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
-        if (event.getBlock().getType() == Material.GLASS_PANE) {
+        // game must be running
+        if (!isPlayerInGame(event.getPlayer()) || !isGameRunning(event.getPlayer()) || event.getBlock().getType() == Material.GLASS_PANE) {
             event.setCancelled(true);
         }
     }
