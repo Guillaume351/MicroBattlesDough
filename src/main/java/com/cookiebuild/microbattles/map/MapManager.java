@@ -76,6 +76,8 @@ public class MapManager {
         world.setAutoSave(false);
         world.setThundering(false);
 
+        world.setGameRuleValue("announceAdvancements", "false");
+
         // Copy map data to the newly created world
         File worldFolder = world.getWorldFolder();
         FileUtils.copyDirectory(gameMapDir, worldFolder);
@@ -100,7 +102,7 @@ public class MapManager {
         for (String mapName : Objects.requireNonNull(MicroBattles.getInstance().getConfig().getConfigurationSection("maps")).getKeys(false)) {
             GameMap map = initializeMapWithCoordinates(mapName);
             maps.put(mapName, map);
-            MicroBattles.getInstance().getLogger().info("Loaded map " + mapName);
+            MicroBattles.getInstance().getLogger().info("Registered map " + mapName);
         }
     }
 

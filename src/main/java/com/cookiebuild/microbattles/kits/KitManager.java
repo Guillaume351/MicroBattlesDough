@@ -147,13 +147,14 @@ public class KitManager {
         minerKit.addItem(Material.IRON_PICKAXE, 1, Enchantment.EFFICIENCY, 3);
         minerKit.addItem(Material.STONE, 64);
         minerKit.addItem(Material.TNT, 3);
+        minerKit.addItem(Material.REDSTONE_TORCH, 1);
         minerKit.setArmor(Material.IRON_HELMET, Material.IRON_CHESTPLATE, Material.IRON_LEGGINGS, Material.IRON_BOOTS);
         kits.add(minerKit);
     }
 
     private void createVampireKit() {
         Kit vampireKit = new Kit("Vampire");
-        vampireKit.addItem(Material.IRON_SWORD, 1);
+        vampireKit.addItem(Material.WOODEN_SWORD, 1);
         vampireKit.addItem(Material.REDSTONE, 8); // Represents blood
         vampireKit.addItemStack(PotionUtil.createPotion(PotionEffectType.REGENERATION, 600, 0), 1);// Regeneration I for 30 seconds
         vampireKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
@@ -162,10 +163,11 @@ public class KitManager {
 
     private void createFrostMageKit() {
         Kit frostMageKit = new Kit("Frost Mage");
+
         frostMageKit.addItem(Material.DIAMOND_HOE, 1); // Ice wand
         frostMageKit.addItem(Material.SNOWBALL, 8);
         frostMageKit.addItem(Material.PACKED_ICE, 32);
-        frostMageKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
+        frostMageKit.setArmor(Material.DIAMOND_HELMET, Material.CHAINMAIL_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
         kits.add(frostMageKit);
     }
 
@@ -183,15 +185,18 @@ public class KitManager {
         trapperKit.addItem(Material.TRIPWIRE_HOOK, 16);
         trapperKit.addItem(Material.REDSTONE, 32);
         trapperKit.addItem(Material.PISTON, 8);
+        trapperKit.addItem(Material.TNT, 2);
+        trapperKit.addItem(Material.REDSTONE_TORCH, 4);
+        trapperKit.addItem(Material.STRING, 64);
+        trapperKit.addItem(Material.REPEATER, 4);
         trapperKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
         kits.add(trapperKit);
     }
 
     private void createAlchemistKit() {
         Kit alchemistKit = new Kit("Alchemist");
-        alchemistKit.addItem(Material.BREWING_STAND, 1);
-        alchemistKit.addItem(Material.BLAZE_POWDER, 16);
-        alchemistKit.addItem(Material.NETHER_WART, 16);
+        alchemistKit.addItem(Material.STONE_SWORD, 1);
+        alchemistKit.addItem(Material.BREWING_STAND, 4);
         alchemistKit.setArmor(Material.GOLDEN_HELMET, Material.GOLDEN_CHESTPLATE, Material.GOLDEN_LEGGINGS, Material.GOLDEN_BOOTS);
         kits.add(alchemistKit);
     }

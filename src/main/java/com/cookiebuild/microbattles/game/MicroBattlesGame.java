@@ -60,8 +60,8 @@ public class MicroBattlesGame extends Game {
     }
 
     public void setupTeams() {
-        teams.put("Red", new MicroBattlesTeam("Red", teamSize));
         teams.put("Blue", new MicroBattlesTeam("Blue", teamSize));
+        teams.put("Red", new MicroBattlesTeam("Red", teamSize));
         teams.put("Yellow", new MicroBattlesTeam("Yellow", teamSize));
         teams.put("Green", new MicroBattlesTeam("Green", teamSize));
     }
@@ -76,12 +76,14 @@ public class MicroBattlesGame extends Game {
     }
 
     @Override
-    public void addPlayer(CookiePlayer player) {
-        if (!getPlayers().contains(player)) {
-            super.addPlayer(player);
+    public boolean addPlayer(CookiePlayer player) {
+        if (super.addPlayer(player)) {
             assignTeam(player);
             teleportToGame(player);
+        } else {
+            return false;
         }
+        return true;
     }
 
     @Override
@@ -116,9 +118,9 @@ public class MicroBattlesGame extends Game {
 
             // store player's kit
             kits.put(player.getPlayer().getUniqueId().toString(), kit);
+
+            updatePlayerNameColor(player);
         }
-
-
     }
 
     // function to ask which kit the player has
@@ -244,7 +246,7 @@ public class MicroBattlesGame extends Game {
             public void run() {
                 if (timeLeft > 0) {
                     for (CookiePlayer player : getPlayers()) {
-                        player.getPlayer().sendActionBar(LocaleManager.getMessage("game.teleport_countdown", player.getPlayer().locale(), String.valueOf(timeLeft)));
+                        player.getPlayer().sendTitle("", LocaleManager.getMessage("game.teleport_countdown", player.getPlayer().locale(), String.valueOf(timeLeft)));
                     }
                     timeLeft--;
                 } else {
