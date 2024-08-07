@@ -7,11 +7,13 @@ import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
 import com.cookiebuild.microbattles.kits.Kit;
 import org.bukkit.*;
+import org.bukkit.entity.Arrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
@@ -118,7 +120,7 @@ public class KitEffectListener implements Listener {
         Vector direction = player.getLocation().getDirection().setY(0).normalize();
         Vector perpendicular = new Vector(-direction.getZ(), 0, direction.getX()).normalize();
 
-        for (int length = 0; length < 8; length++) {
+        for (int length = 0; length < 16; length++) {
             for (int width = -1; width <= 1; width++) {
                 Location bridgeLoc = startLoc.clone().add(direction.clone().multiply(length)).add(perpendicular.clone().multiply(width));
 
@@ -164,7 +166,7 @@ public class KitEffectListener implements Listener {
         // Schedule task to remove fire and fire resistance
         Bukkit.getScheduler().runTaskLater(player.getServer().getPluginManager().getPlugin("MicroBattles"), () -> {
             // Remove fire
-            for (int i = 0; i < 16; i++) {
+            for (int i = 0; i < 32; i++) {
                 double angle = 2 * Math.PI * i / 16;
                 Location loc = center.clone().add(2 * Math.cos(angle), 0, 2 * Math.sin(angle));
                 if (loc.getBlock().getType() == Material.FIRE) {
@@ -215,5 +217,23 @@ public class KitEffectListener implements Listener {
             return null;
         }
         return microBattlesGame.getKit(cookiePlayer);
+    }
+
+    @EventHandler
+    public void onProjectileHit(ProjectileHitEvent event) {
+        if (event.getEntity() instanceof Arrow && event.getEntity().getShooter() instanceof Player shooter) {
+            CookiePlayer cookiePlayer = PlayerManager.getPlayer(shooter);
+            Game game = GameManager.getGameOfPlayer(cookiePlayer);
+
+            if (game instanceof MicroBattlesGame microBattlesGame && game.hasStarted()) {
+                Kit playerKit = microBattlesGame.getKit(cookiePlayer);
+
+                if (playerKit != null && playerKit.getName().equals("Explosive Archer")) {
+                    // Create an explosion at the arrow's location
+                    event.getEntity().getWorld().createExplosion(event.getEntity().getLocation(), 2.0F, true, true);
+                    event.getEntity().remove(); // Remove the arrow after explosion
+                }
+            }
+        }
     }
 }

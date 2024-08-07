@@ -3,6 +3,7 @@ package com.cookiebuild.microbattles.kits;
 import com.cookiebuild.cookiedough.utils.PotionUtil;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffectType;
 
 import java.util.ArrayList;
@@ -54,7 +55,7 @@ public class KitManager {
     private void createExplosiveArcherKit() {
         Kit explosiveArcherKit = new Kit("Explosive Archer");
         explosiveArcherKit.addItem(Material.BOW, 1, Enchantment.POWER, 2);
-        explosiveArcherKit.addItem(Material.ARROW, 64);
+        explosiveArcherKit.addItem(Material.ARROW, 4);
         explosiveArcherKit.addItem(Material.GOLDEN_PICKAXE, 1);
         explosiveArcherKit.addItem(Material.TNT, 5);
         explosiveArcherKit.setArmor(Material.LEATHER_HELMET, Material.CHAINMAIL_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
@@ -126,8 +127,8 @@ public class KitManager {
 
     private void createChemistKit() {
         Kit chemistKit = new Kit("Chemist");
-        chemistKit.addItemStack(PotionUtil.createSplashPotion(PotionEffectType.INSTANT_DAMAGE, 1, 0), 3); // Instant Damage I
-        chemistKit.addItemStack(PotionUtil.createLingeringPotion(PotionEffectType.POISON, 200, 0), 2); // Poison I for 10 seconds
+        chemistKit.addItemStack(PotionUtil.createSplashPotion(PotionEffectType.INSTANT_DAMAGE, 1, 2), 4); // Instant Damage I
+        chemistKit.addItemStack(PotionUtil.createLingeringPotion(PotionEffectType.POISON, 200, 3), 2); // Poison I for 10 seconds
         chemistKit.addItem(Material.WOODEN_SWORD, 1);
         chemistKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
         kits.add(chemistKit);
@@ -148,6 +149,7 @@ public class KitManager {
         minerKit.addItem(Material.STONE, 64);
         minerKit.addItem(Material.TNT, 3);
         minerKit.addItem(Material.REDSTONE_TORCH, 1);
+        minerKit.addItem(Material.BEDROCK, 3);
         minerKit.setArmor(Material.IRON_HELMET, Material.IRON_CHESTPLATE, Material.IRON_LEGGINGS, Material.IRON_BOOTS);
         kits.add(minerKit);
     }
@@ -164,6 +166,9 @@ public class KitManager {
     private void createFrostMageKit() {
         Kit frostMageKit = new Kit("Frost Mage");
 
+        ItemStack iceWand = new ItemStack(Material.DIAMOND_HOE);
+        iceWand.addUnsafeEnchantment(Enchantment.WIND_BURST, 1);
+
         frostMageKit.addItem(Material.DIAMOND_HOE, 1); // Ice wand
         frostMageKit.addItem(Material.SNOWBALL, 8);
         frostMageKit.addItem(Material.PACKED_ICE, 32);
@@ -173,7 +178,7 @@ public class KitManager {
 
     private void createJuggernautKit() {
         Kit juggernautKit = new Kit("Juggernaut");
-        juggernautKit.addItem(Material.STONE_AXE, 1);
+        juggernautKit.addItem(Material.WOODEN_AXE, 1);
         juggernautKit.addItem(Material.SHIELD, 1);
         juggernautKit.setArmor(Material.DIAMOND_HELMET, Material.DIAMOND_CHESTPLATE, Material.DIAMOND_LEGGINGS, Material.DIAMOND_BOOTS);
         kits.add(juggernautKit);

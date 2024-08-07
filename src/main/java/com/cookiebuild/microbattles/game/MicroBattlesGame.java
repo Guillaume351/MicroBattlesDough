@@ -12,11 +12,11 @@ import com.cookiebuild.microbattles.kits.Kit;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.map.GameMap;
 import com.cookiebuild.microbattles.map.MapManager;
-import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
-import org.bukkit.Location;
-import org.bukkit.World;
+import org.bukkit.*;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -119,7 +119,34 @@ public class MicroBattlesGame extends Game {
             // store player's kit
             kits.put(player.getPlayer().getUniqueId().toString(), kit);
 
+            // Give 16 wools of the color of the team to the player
+            giveTeamColoredWool(player);
+
             updatePlayerNameColor(player);
+        }
+    }
+
+    private void giveTeamColoredWool(CookiePlayer player) {
+        String teamColor = getPlayerTeamColor(player);
+        if (teamColor != null) {
+            Material woolMaterial = getWoolMaterial(teamColor);
+            ItemStack wool = new ItemStack(woolMaterial, 16);
+            player.getPlayer().getInventory().addItem(wool);
+        }
+    }
+
+    private Material getWoolMaterial(String teamColor) {
+        switch (teamColor.toLowerCase()) {
+            case "red":
+                return Material.RED_WOOL;
+            case "blue":
+                return Material.BLUE_WOOL;
+            case "yellow":
+                return Material.YELLOW_WOOL;
+            case "green":
+                return Material.LIME_WOOL;
+            default:
+                return Material.WHITE_WOOL;
         }
     }
 
@@ -298,11 +325,30 @@ public class MicroBattlesGame extends Game {
         String teamColor = getPlayerTeamColor(player);
         if (teamColor != null) {
             String colorCode = getColorCode(teamColor);
-            // Use your scoreboard API to set the player's name color
-            // For example:
-            // scoreboardAPI.setPlayerNameColor(player.getPlayer(), colorCode + player.getPlayer().getName());
             if (colorCode != null) {
-                player.getPlayer().setDisplayName(colorCode + player.getPlayer().getName());
+                Player bukkitPlayer = player.getPlayer();
+                String coloredName = colorCode + bukkitPlayer.getName();
+
+                // Update display name (affects chat)
+                bukkitPlayer.setDisplayName(coloredName);
+
+                // Update scoreboard team (affects nametag)
+                Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
+                Team team = scoreboard.getEntryTeam(bukkitPlayer.getName());
+
+                if (team == null) {
+                    // Create a new team if it doesn't exist
+                    team = scoreboard.registerNewTeam(bukkitPlayer.getName());
+                }
+
+                // Set team prefix to color code
+                team.setPrefix(colorCode);
+
+                // Add player to the team
+                team.addEntry(bukkitPlayer.getName());
+
+                // Update player's nametag visibility
+                bukkitPlayer.setScoreboard(scoreboard);
             }
         }
     }

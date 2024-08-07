@@ -167,9 +167,12 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
 
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
+        // TODO: fix. It shouldn't apply EVERYWHERE but only in protected worlds
         // game must be running
         if (!isPlayerInGame(event.getPlayer()) || !isGameRunning(event.getPlayer()) || event.getBlock().getType() == Material.GLASS_PANE) {
             event.setCancelled(true);
         }
     }
+
+
 }
