@@ -281,7 +281,7 @@ public class MicroBattlesGame extends Game {
                         LobbyManager.teleportPlayerToLobby(player);
                     }
                     GameManager.removeGame(MicroBattlesGame.this);
-                    Bukkit.getScheduler().cancelTasks(MicroBattles.getInstance());
+                    // TODO: cancel tasks related to this game only
                 }
             }
         }, 0L, 20L); // Run every second
