@@ -110,6 +110,7 @@ public class MicroBattlesGame extends Game {
         player.getPlayer().teleport(spawnLocation);
 
         if (this.getState() != GameState.RUNNING) {
+            player.getPlayer().setGameMode(GameMode.SURVIVAL);
             Kit kit = KitManager.getInstance().getRandomKit();
             kit.equipPlayer(player.getPlayer());
             // Inform the player about their kit
