@@ -109,6 +109,9 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
 
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
+        if (!protectedWorlds.contains(event.getPlayer().getWorld().getName())) {
+            return;
+        }
         Player player = event.getPlayer();
         CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
         Game game = GameManager.getGameOfPlayer(cookiePlayer);
