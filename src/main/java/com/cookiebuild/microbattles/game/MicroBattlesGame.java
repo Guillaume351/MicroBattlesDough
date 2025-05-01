@@ -215,17 +215,32 @@ public class MicroBattlesGame extends Game {
 
             bukkitPlayer.sendActionBar(LocaleManager.getMessage(gameState, player.getPlayer().locale()) + " " + countdownInfo);
 
-            scoreboardManager.createScoreboard(bukkitPlayer, "MicroBattles");
-            scoreboardManager.updateScore(bukkitPlayer, "Game State:", 15);
-            scoreboardManager.updateScore(bukkitPlayer, LocaleManager.getMessage(gameState, player.getPlayer().locale()), 14);
-            scoreboardManager.updateScore(bukkitPlayer, "", 13);
-            scoreboardManager.updateScore(bukkitPlayer, isSpectator ? "Spectating" : "Players:", 12);
+
+            scoreboardManager.createScoreboard(bukkitPlayer, "§6§lMicroBattles");
+            scoreboardManager.updateScore(bukkitPlayer, "§e", 6);
+            scoreboardManager.updateScore(bukkitPlayer, "§fTeams Left: §a" + getActiveTeamsCount(), 5);
+            scoreboardManager.updateScore(bukkitPlayer, "§fKills: §a" + getPlayerKills(player), 4);
+            scoreboardManager.updateScore(bukkitPlayer, "§e", 3);
+            scoreboardManager.updateScore(bukkitPlayer, "§7", 2);
+            scoreboardManager.updateScore(bukkitPlayer, "§ewww.cookie-build.com", 1);
 
             int line = 11;
             for (MicroBattlesTeam team : teams.values()) {
                 scoreboardManager.updateScore(bukkitPlayer, team.getName() + ": " + team.getPlayers().stream().filter(p -> p.getPlayer().getGameMode() != GameMode.SPECTATOR).count(), line--);
             }
         }
+    }
+
+    private int getActiveTeamsCount() {
+        return (int) teams.values().stream()
+                .filter(team -> team.getPlayers().stream().anyMatch(p -> p.getPlayer().getGameMode() != GameMode.SPECTATOR))
+                .count();
+    }
+
+    private int getPlayerKills(CookiePlayer player) {
+        // Implement this method to return the player's kill count
+        // You'll need to track kills elsewhere in your code
+        return 0; // Placeholder
     }
 
     private void removeWall() {
