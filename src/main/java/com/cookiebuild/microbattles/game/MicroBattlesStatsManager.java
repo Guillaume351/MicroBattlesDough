@@ -33,8 +33,6 @@ public class MicroBattlesStatsManager {
      * @param won               Whether the player won
      * @param kills             Number of kills
      * @param deaths            Number of deaths
-     * @param flagsCaptured     Number of flags captured
-     * @param powerupsCollected Number of powerups collected
      * @param teamsEliminated   Number of teams eliminated
      * @return The updated stats
      */
@@ -43,15 +41,12 @@ public class MicroBattlesStatsManager {
             boolean won,
             int kills,
             int deaths,
-            int flagsCaptured,
-            int powerupsCollected,
             int teamsEliminated) {
 
         MicroBattlesStats stats = statsService.updatePlayerStatsAfterGame(
                 player, "MicroBattles", won, kills, deaths, MicroBattlesStats.class);
 
-        stats.addFlagsCaptured(flagsCaptured);
-        stats.addPowerupsCollected(powerupsCollected);
+
         stats.addTeamsEliminated(teamsEliminated);
 
         statsService.saveStats(stats);

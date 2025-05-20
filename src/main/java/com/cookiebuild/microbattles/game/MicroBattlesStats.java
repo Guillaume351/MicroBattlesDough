@@ -12,47 +12,21 @@ import jakarta.persistence.Table;
 public class MicroBattlesStats extends GameStats {
 
     @Column(nullable = false)
-    private int flagsCaptured;
-
-    @Column(nullable = false)
-    private int powerupsCollected;
-
-    @Column(nullable = false)
     private int teamsEliminated;
 
     // Constructors
     public MicroBattlesStats() {
         super();
         this.setGameType("MicroBattles");
-        this.flagsCaptured = 0;
-        this.powerupsCollected = 0;
         this.teamsEliminated = 0;
     }
 
     public MicroBattlesStats(PlayerData player) {
         super(player, "MicroBattles");
-        this.flagsCaptured = 0;
-        this.powerupsCollected = 0;
         this.teamsEliminated = 0;
     }
 
-    // Getters and setters
-    public int getFlagsCaptured() {
-        return flagsCaptured;
-    }
-
-    public void setFlagsCaptured(int flagsCaptured) {
-        this.flagsCaptured = flagsCaptured;
-    }
-
-    public int getPowerupsCollected() {
-        return powerupsCollected;
-    }
-
-    public void setPowerupsCollected(int powerupsCollected) {
-        this.powerupsCollected = powerupsCollected;
-    }
-
+    // Getters and setters for teamsEliminated
     public int getTeamsEliminated() {
         return teamsEliminated;
     }
@@ -61,28 +35,22 @@ public class MicroBattlesStats extends GameStats {
         this.teamsEliminated = teamsEliminated;
     }
 
-    // Utility methods
-    public void incrementFlagsCaptured() {
-        this.flagsCaptured++;
-    }
-
-    public void incrementPowerupsCollected() {
-        this.powerupsCollected++;
-    }
-
+    // Utility methods for teamsEliminated
     public void incrementTeamsEliminated() {
         this.teamsEliminated++;
     }
 
-    public void addFlagsCaptured(int count) {
-        this.flagsCaptured += count;
-    }
-
-    public void addPowerupsCollected(int count) {
-        this.powerupsCollected += count;
-    }
-
     public void addTeamsEliminated(int count) {
         this.teamsEliminated += count;
+    }
+
+    @Override
+    public java.util.Map<String, String> getFormattedSpecificStats() {
+        java.util.Map<String, String> specificStats = new java.util.LinkedHashMap<>();
+        // getTotalKills() from base GameStats will represent players eliminated in the
+        // context of this game.
+        specificStats.put("Players Elim.", String.valueOf(this.getTotalKills()));
+        specificStats.put("Teams Elim.", String.valueOf(this.getTeamsEliminated()));
+        return specificStats;
     }
 }
