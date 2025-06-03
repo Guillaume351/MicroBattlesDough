@@ -382,31 +382,38 @@ public class MicroBattlesGame extends Game {
         }
 
         if (this.currentMatchInstance != null) {
-            matchService.endMatch(this.currentMatchInstance, winnerPlayerDataList);
+            try {
+                // Update final performance stats for all participants outside of transaction
+                for (Map.Entry<UUID, PlayerData> entry : participantPlayerData.entrySet()) {
+                    UUID playerId = entry.getKey();
+                    MicroBattlesMatchPerformance perf = matchPerformances.get(playerId);
 
-            // Record final performance stats for all participants
-            for (Map.Entry<UUID, PlayerData> entry : participantPlayerData.entrySet()) {
-                UUID playerId = entry.getKey();
-                PlayerData playerData = entry.getValue();
-                MicroBattlesMatchPerformance perf = matchPerformances.get(playerId);
+                    if (perf == null) {
+                        MicroBattles.getInstance().getLogger().warning(
+                            "No performance record found for player " + playerId + " in match " + currentMatchInstance.getId());
+                        continue;
+                    }
 
-                Map<String, Object> specificMetrics = new HashMap<>();
-                specificMetrics.put("teamsEliminated", perf.getTeamsEliminated());
-                specificMetrics.put("assists", perf.getAssists());
+                    // Update final stats
+                    perf.setKillsInMatch(playerKillsThisMatch.getOrDefault(playerId, 0));
+                    perf.setDeathsInMatch(playerDeathsThisMatch.getOrDefault(playerId, 0));
+                    perf.setAssistsInMatch(playerAssistsThisMatch.getOrDefault(playerId, 0));
+                }
 
-                matchService.recordPlayerPerformance(
-                        currentMatchInstance,
-                        playerData,
-                        perf.getKillsInMatch(),
-                        perf.getDeathsInMatch(),
-                        perf.getAssists(),
-                        specificMetrics);
+                // Let MatchService handle its own transaction
+                matchService.endMatch(this.currentMatchInstance, winnerPlayerDataList);
+                
+                MicroBattles.getInstance().getLogger().info("MicroBattles match ended: " + this.currentMatchInstance.getId());
+            } catch (Exception e) {
+                MicroBattles.getInstance().getLogger().severe("Error saving match data: " + e.getMessage());
+                e.printStackTrace();
             }
         } else {
             MicroBattles.getInstance().getLogger()
                     .warning("currentMatchInstance was null during endGame for MicroBattles.");
         }
 
+        // Handle game end messaging and cleanup
         String winMessage;
         if (winningTeam != null) {
             winMessage = "game.win_team";
