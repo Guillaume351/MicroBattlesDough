@@ -28,6 +28,7 @@ import com.cookiebuild.cookiedough.game.GameState;
 import com.cookiebuild.cookiedough.lobby.LobbyManager;
 import com.cookiebuild.cookiedough.model.Match;
 import com.cookiebuild.cookiedough.model.PlayerData;
+import com.cookiebuild.cookiedough.model.PlayerMatchPerformance;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
 import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.service.MatchService;
@@ -38,6 +39,8 @@ import com.cookiebuild.microbattles.kits.Kit;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.map.GameMap;
 import com.cookiebuild.microbattles.map.MapManager;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 
 import jakarta.persistence.EntityManager;
 import net.kyori.adventure.text.Component;
@@ -48,6 +51,7 @@ public class MicroBattlesGame extends Game {
     int teamSize = 3;
     private GameMap map;
     private final HashMap<String, MicroBattlesTeam> teams = new HashMap<>();
+    private final Gson gson = new Gson();
 
     // store player's kits
     private final HashMap<String, Kit> kits = new HashMap<>();
@@ -66,8 +70,9 @@ public class MicroBattlesGame extends Game {
     private final HashMap<UUID, PlayerData> participantPlayerData = new HashMap<>();
     private final HashMap<UUID, Integer> playerKillsThisMatch = new HashMap<>();
     private final HashMap<UUID, Integer> playerDeathsThisMatch = new HashMap<>();
-    private final HashMap<UUID, Integer> playerAssistsThisMatch = new HashMap<>(); // Basic assist tracking
-    private final Map<UUID, MicroBattlesMatchPerformance> matchPerformances = new HashMap<>();
+    private final HashMap<UUID, Integer> playerAssistsThisMatch = new HashMap<>();
+    private final HashMap<UUID, Integer> playerTeamsEliminatedThisMatch = new HashMap<>(); // Track teams eliminated
+    private final Map<UUID, PlayerMatchPerformance> matchPerformances = new HashMap<>();
     // --- End New Stats and Match Tracking Fields ---
 
     public MicroBattlesGame() {
@@ -155,10 +160,13 @@ public class MicroBattlesGame extends Game {
                     .warning("MicroBattles game starting with no participant PlayerData recorded. Match not started.");
         }
 
-        // Initialize performance tracking for all players
+        // Initialize performance tracking for all players with empty metrics
         for (UUID playerId : participantPlayerData.keySet()) {
             PlayerData playerData = participantPlayerData.get(playerId);
-            MicroBattlesMatchPerformance perf = new MicroBattlesMatchPerformance(currentMatchInstance, playerData);
+            PlayerMatchPerformance perf = new PlayerMatchPerformance(currentMatchInstance, playerData);
+            JsonObject metrics = new JsonObject();
+            metrics.addProperty("teamsEliminated", 0);
+            perf.setGameSpecificMetrics(metrics.toString());
             matchPerformances.put(playerId, perf);
             currentMatchInstance.addPerformance(perf);
         }
@@ -386,11 +394,12 @@ public class MicroBattlesGame extends Game {
                 // Update final performance stats for all participants outside of transaction
                 for (Map.Entry<UUID, PlayerData> entry : participantPlayerData.entrySet()) {
                     UUID playerId = entry.getKey();
-                    MicroBattlesMatchPerformance perf = matchPerformances.get(playerId);
+                    PlayerMatchPerformance perf = matchPerformances.get(playerId);
 
                     if (perf == null) {
                         MicroBattles.getInstance().getLogger().warning(
-                            "No performance record found for player " + playerId + " in match " + currentMatchInstance.getId());
+                                "No performance record found for player " + playerId + " in match "
+                                        + currentMatchInstance.getId());
                         continue;
                     }
 
@@ -398,12 +407,20 @@ public class MicroBattlesGame extends Game {
                     perf.setKillsInMatch(playerKillsThisMatch.getOrDefault(playerId, 0));
                     perf.setDeathsInMatch(playerDeathsThisMatch.getOrDefault(playerId, 0));
                     perf.setAssistsInMatch(playerAssistsThisMatch.getOrDefault(playerId, 0));
+
+                    // Update game-specific metrics in JSON
+                    JsonObject metrics = gson.fromJson(perf.getGameSpecificMetrics(), JsonObject.class);
+                    if (metrics == null)
+                        metrics = new JsonObject();
+                    metrics.addProperty("teamsEliminated", playerTeamsEliminatedThisMatch.getOrDefault(playerId, 0));
+                    perf.setGameSpecificMetrics(metrics.toString());
                 }
 
                 // Let MatchService handle its own transaction
                 matchService.endMatch(this.currentMatchInstance, winnerPlayerDataList);
-                
-                MicroBattles.getInstance().getLogger().info("MicroBattles match ended: " + this.currentMatchInstance.getId());
+
+                MicroBattles.getInstance().getLogger()
+                        .info("MicroBattles match ended: " + this.currentMatchInstance.getId());
             } catch (Exception e) {
                 MicroBattles.getInstance().getLogger().severe("Error saving match data: " + e.getMessage());
                 e.printStackTrace();
@@ -590,18 +607,23 @@ public class MicroBattlesGame extends Game {
             return;
 
         UUID victimId = victim.getPlayer().getUniqueId();
-        MicroBattlesMatchPerformance victimPerf = matchPerformances.get(victimId);
-        victimPerf.incrementDeathsInMatch();
+        // Update deaths count in our tracking HashMap
+        playerDeathsThisMatch.put(victimId,
+                playerDeathsThisMatch.getOrDefault(victimId, 0) + 1);
 
         if (killer != null && !arePlayersInSameTeam(victim, killer)) {
             UUID killerId = killer.getPlayer().getUniqueId();
-            MicroBattlesMatchPerformance killerPerf = matchPerformances.get(killerId);
-            killerPerf.incrementKillsInMatch();
+            // Update kills count in our tracking HashMap
+            playerKillsThisMatch.put(killerId,
+                    playerKillsThisMatch.getOrDefault(killerId, 0) + 1);
 
             // Check if this kill eliminated the team
             MicroBattlesTeam victimTeam = getPlayerTeam(victim);
-            if (victimTeam != null && victimTeam.getAlivePlayers().isEmpty()) {
-                killerPerf.incrementTeamsEliminated();
+            if (victimTeam != null && victimTeam.getAlivePlayers().stream()
+                    .filter(p -> p.getPlayer() != victim.getPlayer()).count() == 0) {
+                // Update teams eliminated count in our tracking HashMap
+                playerTeamsEliminatedThisMatch.put(killerId,
+                        playerTeamsEliminatedThisMatch.getOrDefault(killerId, 0) + 1);
             }
 
             killer.getPlayer().sendMessage(Component.text("You eliminated ")
