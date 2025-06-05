@@ -1,12 +1,7 @@
 package com.cookiebuild.microbattles.listener;
 
-import com.cookiebuild.cookiedough.game.Game;
-import com.cookiebuild.cookiedough.game.GameManager;
-import com.cookiebuild.cookiedough.listener.BaseEventBlocker;
-import com.cookiebuild.cookiedough.player.CookiePlayer;
-import com.cookiebuild.cookiedough.player.PlayerManager;
-import com.cookiebuild.cookiedough.player.PlayerState;
-import com.cookiebuild.microbattles.game.MicroBattlesGame;
+import java.util.ArrayList;
+
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -23,14 +18,19 @@ import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 
-import java.util.ArrayList;
+import com.cookiebuild.cookiedough.game.Game;
+import com.cookiebuild.cookiedough.game.GameManager;
+import com.cookiebuild.cookiedough.listener.BaseEventBlocker;
+import com.cookiebuild.cookiedough.player.CookiePlayer;
+import com.cookiebuild.cookiedough.player.PlayerManager;
+import com.cookiebuild.cookiedough.player.PlayerState;
+import com.cookiebuild.microbattles.game.MicroBattlesGame;
 
 public class InGamePlayerEventListener extends BaseEventBlocker {
 
     public InGamePlayerEventListener() {
         protectedWorlds = new ArrayList<>();
     }
-
 
     public void addProtectedWorld(String worldName) {
         protectedWorlds.add(worldName);
@@ -43,7 +43,8 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
     private boolean isPlayerInGame(Player player) {
         CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
         Game game = GameManager.getGameOfPlayer(cookiePlayer);
-        return cookiePlayer != null && cookiePlayer.getState() == PlayerState.IN_GAME && game instanceof MicroBattlesGame;
+        return cookiePlayer != null && cookiePlayer.getState() == PlayerState.IN_GAME
+                && game instanceof MicroBattlesGame;
     }
 
     private boolean isGameRunning(Player player) {
@@ -146,10 +147,9 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
                 killer.playSound(killer.getLocation(), Sound.ENTITY_PLAYER_DEATH, 1, 1);
             }
 
-            microBattlesGame.handlePlayerDeath(cookiePlayer);
+            microBattlesGame.handlePlayerDeath(cookiePlayer, PlayerManager.getPlayer(killer));
         }
     }
-
 
     @EventHandler
     public void onSpectatorInteract(PlayerInteractEvent event) {
@@ -158,7 +158,6 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
             event.setCancelled(true);
         }
     }
-
 
     @EventHandler
     public void onFireSpread(BlockIgniteEvent event) {
@@ -172,10 +171,10 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
     public void onBlockBreak(BlockBreakEvent event) {
         // TODO: fix. It shouldn't apply EVERYWHERE but only in protected worlds
         // game must be running
-        if (!isPlayerInGame(event.getPlayer()) || !isGameRunning(event.getPlayer()) || event.getBlock().getType() == Material.GLASS_PANE) {
+        if (!isPlayerInGame(event.getPlayer()) || !isGameRunning(event.getPlayer())
+                || event.getBlock().getType() == Material.GLASS_PANE) {
             event.setCancelled(true);
         }
     }
-
 
 }

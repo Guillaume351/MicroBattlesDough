@@ -1,8 +1,13 @@
 package com.cookiebuild.microbattles.game;
 
-import com.cookiebuild.cookiedough.player.CookiePlayer;
-
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import org.bukkit.GameMode;
+
+import com.cookiebuild.cookiedough.player.CookiePlayer;
 
 public class MicroBattlesTeam {
     private final String name;
@@ -35,8 +40,19 @@ public class MicroBattlesTeam {
         return players;
     }
 
+    public ArrayList<CookiePlayer> getAlivePlayers() {
+        return players.stream()
+                .filter(p -> p.getPlayer().getGameMode() != GameMode.SPECTATOR)
+                .collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    public Set<UUID> getPlayersUUIDs() {
+        return players.stream()
+                .map(p -> p.getPlayer().getUniqueId())
+                .collect(Collectors.toSet());
+    }
+
     public String getName() {
         return name;
     }
-
 }
