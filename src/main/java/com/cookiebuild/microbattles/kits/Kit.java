@@ -1,12 +1,12 @@
 package com.cookiebuild.microbattles.kits;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class Kit {
     private final String name;
@@ -15,10 +15,18 @@ public class Kit {
     private ItemStack chestplate;
     private ItemStack leggings;
     private ItemStack boots;
+    private final int price;
+    private final int requiredLevel;
+    private final boolean defaultUnlocked;
+    private final String description;
 
-    public Kit(String name) {
+    public Kit(String name, int price, int requiredLevel, boolean defaultUnlocked, String description) {
         this.name = name;
         this.items = new ArrayList<>();
+        this.price = price;
+        this.requiredLevel = requiredLevel;
+        this.defaultUnlocked = defaultUnlocked;
+        this.description = description;
     }
 
     public void addItem(Material material, int amount) {
@@ -57,5 +65,21 @@ public class Kit {
 
     public String getName() {
         return name;
+    }
+
+    public int getPrice() {
+        return price;
+    }
+
+    public int getRequiredLevel() {
+        return requiredLevel;
+    }
+
+    public boolean isDefaultUnlocked() {
+        return defaultUnlocked;
+    }
+
+    public String getDescription() {
+        return description;
     }
 }

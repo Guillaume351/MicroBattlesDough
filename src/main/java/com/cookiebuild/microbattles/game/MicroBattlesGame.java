@@ -53,8 +53,10 @@ public class MicroBattlesGame extends Game {
     private final HashMap<String, MicroBattlesTeam> teams = new HashMap<>();
     private final Gson gson = new Gson();
 
-    // store player's kits
-    private final HashMap<String, Kit> kits = new HashMap<>();
+    // store player's selected kits (before game starts)
+    private final HashMap<String, Kit> selectedKits = new HashMap<>();
+    // store player's equipped kits (during game)
+    private final HashMap<String, Kit> equippedKits = new HashMap<>();
 
     private static final int WALL_REMOVE_DELAY_SECONDS = 15;
     private int wallRemoveTimer = 0;
@@ -170,6 +172,34 @@ public class MicroBattlesGame extends Game {
             matchPerformances.put(playerId, perf);
             currentMatchInstance.addPerformance(perf);
         }
+
+        // Équiper les kits sélectionnés par les joueurs au début de la partie
+        equipSelectedKits();
+    }
+
+    private void equipSelectedKits() {
+        for (CookiePlayer player : getPlayers()) {
+            Kit selectedKit = getSelectedKit(player);
+            if (selectedKit == null) {
+                // Si le joueur n'a pas sélectionné de kit, donner le kit par défaut
+                selectedKit = KitManager.getInstance().getKit("Default");
+                if (selectedKit == null) {
+                    selectedKit = KitManager.getInstance().getRandomKit();
+                }
+            }
+
+            // Équiper le kit
+            selectedKit.equipPlayer(player.getPlayer());
+            equippedKits.put(player.getPlayer().getUniqueId().toString(), selectedKit);
+
+            // Informer le joueur
+            player.getPlayer().sendMessage("§aYou have been equipped with the §6" + selectedKit.getName() + " §akit!");
+            player.getPlayer().showTitle(
+                    Title.title(
+                            Component.text("§6" + selectedKit.getName()),
+                            Component.text("§aKit equipped!"),
+                            Title.Times.times(Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofSeconds(1))));
+        }
     }
 
     @Override
@@ -198,18 +228,16 @@ public class MicroBattlesGame extends Game {
 
         if (this.getState() != GameState.RUNNING) {
             player.getPlayer().setGameMode(GameMode.SURVIVAL);
-            Kit kit = KitManager.getInstance().getRandomKit();
-            kit.equipPlayer(player.getPlayer());
-            // Inform the player about their kit
-            player.getPlayer().sendMessage("§aYou have been given the §6" + kit.getName() + " §akit!");
+
+            // Donner le cookie de sélection de kit au lieu d'un kit aléatoire
+            KitManager.giveKitSelectorCookie(player.getPlayer());
+
+            // Informer le joueur sur le cookie
             player.getPlayer().showTitle(
                     Title.title(
-                            Component.text("§6" + kit.getName()),
-                            Component.text("§aKit assigned!"),
-                            Title.Times.times(Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofSeconds(1))));
-
-            // store player's kit
-            kits.put(player.getPlayer().getUniqueId().toString(), kit);
+                            Component.text("§6Kit Selection"),
+                            Component.text("§aUse the cookie to choose your kit!"),
+                            Title.Times.times(Duration.ofSeconds(1), Duration.ofSeconds(3), Duration.ofSeconds(1))));
 
             // Give 16 wools of the color of the team to the player
             giveTeamColoredWool(player);
@@ -242,9 +270,19 @@ public class MicroBattlesGame extends Game {
         }
     }
 
-    // function to ask which kit the player has
+    // function to ask which kit the player has equipped
     public Kit getKit(CookiePlayer player) {
-        return kits.get(player.getPlayer().getUniqueId().toString());
+        return equippedKits.get(player.getPlayer().getUniqueId().toString());
+    }
+
+    // function to set a player's selected kit (before game starts)
+    public void setSelectedKit(CookiePlayer player, Kit kit) {
+        selectedKits.put(player.getPlayer().getUniqueId().toString(), kit);
+    }
+
+    // function to get a player's selected kit
+    public Kit getSelectedKit(CookiePlayer player) {
+        return selectedKits.get(player.getPlayer().getUniqueId().toString());
     }
 
     @Override
