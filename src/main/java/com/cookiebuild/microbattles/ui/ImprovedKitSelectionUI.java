@@ -39,6 +39,8 @@ public class ImprovedKitSelectionUI implements Listener {
         MinigameStats playerStats = statsService.getOrCreateStats(playerId, MinigameStatsService.MICROBATTLES);
 
         List<Kit> allKits = kitManager.getAllKits();
+        // Trier tous les kits par niveau requis d'abord
+        allKits.sort((k1, k2) -> Integer.compare(k1.getRequiredLevel(), k2.getRequiredLevel()));
 
         // Séparer les kits en catégories
         List<Kit> ownedKits = new ArrayList<>();
@@ -129,6 +131,48 @@ public class ImprovedKitSelectionUI implements Listener {
         gui.setItem(4, playerInfo);
     }
 
+    /**
+     * Retourne le matériau approprié pour représenter chaque kit
+     */
+    private Material getKitMaterial(Kit kit) {
+        switch (kit.getName()) {
+            case "Default":
+                return Material.STONE_SWORD;
+            case "Archer":
+                return Material.BOW;
+            case "Miner":
+                return Material.DIAMOND_PICKAXE;
+            case "Trapper":
+                return Material.TRIPWIRE_HOOK;
+            case "Knockback Warrior":
+                return Material.STICK;
+            case "Berserker":
+                return Material.DIAMOND_AXE;
+            case "Explosive Archer":
+                return Material.TNT;
+            case "Alchemist":
+                return Material.BREWING_STAND;
+            case "Vampire":
+                return Material.IRON_SWORD;
+            case "Tank":
+                return Material.SHIELD;
+            case "Enderman":
+                return Material.ENDER_PEARL;
+            case "Ninja":
+                return Material.LEATHER_BOOTS;
+            case "Chemist":
+                return Material.SPLASH_POTION;
+            case "Frost Mage":
+                return Material.SNOWBALL;
+            case "Assassin":
+                return Material.GOLDEN_SWORD;
+            case "Juggernaut":
+                return Material.NETHERITE_AXE;
+            default:
+                return Material.CHEST; // Fallback pour les kits non reconnus
+        }
+    }
+
     private void addSectionHeader(Inventory gui, int slot, String title, Material material) {
         if (slot >= gui.getSize())
             return;
@@ -148,13 +192,17 @@ public class ImprovedKitSelectionUI implements Listener {
         if (slot >= gui.getSize())
             return;
 
+        // Utiliser le matériau approprié au kit, mais avec une couleur différente selon
+        // le statut
+        Material baseMaterial = getKitMaterial(kit);
         Material iconMaterial;
-        if (unlocked) {
-            iconMaterial = Material.CHEST; // Kit possédé
-        } else if (hasLevel && canAfford) {
-            iconMaterial = Material.ENDER_CHEST; // Kit achetable
+
+        if (!unlocked && !hasLevel) {
+            iconMaterial = Material.BARRIER; // Kit verrouillé par niveau
+        } else if (!unlocked && !canAfford) {
+            iconMaterial = Material.BARRIER; // Kit verrouillé par pièces
         } else {
-            iconMaterial = Material.BARRIER; // Kit verrouillé
+            iconMaterial = baseMaterial; // Utiliser le matériau du kit
         }
 
         ItemStack kitItem = new ItemStack(iconMaterial);
@@ -296,6 +344,8 @@ public class ImprovedKitSelectionUI implements Listener {
                         playerStats.getExperience(), playerStats.getExperienceForNextLevel()));
 
         List<Kit> allKits = kitManager.getAllKits();
+        // Trier les kits par niveau requis
+        allKits.sort((k1, k2) -> Integer.compare(k1.getRequiredLevel(), k2.getRequiredLevel()));
 
         // Séparer et ajouter les kits par sections
         List<Kit> ownedKits = new ArrayList<>();
@@ -315,6 +365,8 @@ public class ImprovedKitSelectionUI implements Listener {
                 lockedKits.add(kit);
             }
         }
+
+        // Les kits sont déjà triés par niveau requis depuis allKits
 
         // Ajouter les boutons par sections
         for (Kit kit : ownedKits) {
