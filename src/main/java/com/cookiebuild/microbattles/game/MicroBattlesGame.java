@@ -32,6 +32,7 @@ import com.cookiebuild.cookiedough.model.PlayerMatchPerformance;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
 import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.service.MatchService;
+import com.cookiebuild.cookiedough.service.PlayerMinigameProgressionService;
 import com.cookiebuild.cookiedough.ui.CustomScoreboardManager;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.MicroBattles;
@@ -456,6 +457,28 @@ public class MicroBattlesGame extends Game {
 
                 // Let MatchService handle its own transaction
                 matchService.endMatch(this.currentMatchInstance, winnerPlayerDataList);
+
+                // Reward all players with coins and XP based on their performance
+                PlayerMinigameProgressionService progressionService = new PlayerMinigameProgressionService(
+                        gameEntityManager);
+                for (Map.Entry<UUID, PlayerData> entry : participantPlayerData.entrySet()) {
+                    UUID playerId = entry.getKey();
+                    PlayerData playerData = entry.getValue();
+                    boolean isWinner = winnerPlayerDataList.contains(playerData);
+
+                    // Get player's performance stats for this match
+                    int kills = playerKillsThisMatch.getOrDefault(playerId, 0);
+                    int deaths = playerDeathsThisMatch.getOrDefault(playerId, 0);
+
+                    try {
+                        progressionService.rewardPlayer(playerId, PlayerMinigameProgressionService.MICROBATTLES,
+                                isWinner, kills, deaths);
+                    } catch (Exception e) {
+                        MicroBattles.getInstance().getLogger()
+                                .severe("Error rewarding player " + playerId + ": " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                }
 
                 MicroBattles.getInstance().getLogger()
                         .info("MicroBattles match ended: " + this.currentMatchInstance.getId());
