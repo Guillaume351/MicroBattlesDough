@@ -4,7 +4,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import com.cookiebuild.cookiedough.CookieDough;
 import com.cookiebuild.cookiedough.game.GameManager;
-import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.service.PlayerMinigameProgressionService;
 import com.cookiebuild.microbattles.commands.KitCommand;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
 import com.cookiebuild.microbattles.kits.KitManager;
@@ -42,18 +42,20 @@ public class MicroBattles extends JavaPlugin {
         getServer().getPluginManager().registerEvents(inGamePlayerEventListener, this);
         getServer().getPluginManager().registerEvents(new KitEffectListener(), this);
 
-        // Créer le service de statistiques des mini-jeux
-        MinigameStatsService statsService = new MinigameStatsService(
+        // Créer le service de progression des mini-jeux
+        PlayerMinigameProgressionService progressionService = new PlayerMinigameProgressionService(
                 CookieDough.getSessionFactory().createEntityManager());
 
         // Créer l'interface de sélection des kits améliorée
-        ImprovedKitSelectionUI kitSelectionUI = new ImprovedKitSelectionUI(KitManager.getInstance(), statsService);
+        ImprovedKitSelectionUI kitSelectionUI = new ImprovedKitSelectionUI(KitManager.getInstance(),
+                progressionService);
         getServer().getPluginManager().registerEvents(kitSelectionUI, this);
 
         // Enregistrer le listener pour le cookie de sélection de kit
-        getServer().getPluginManager().registerEvents(new KitSelectorListener(kitSelectionUI, statsService), this);
+        getServer().getPluginManager().registerEvents(new KitSelectorListener(kitSelectionUI, progressionService),
+                this);
 
         // Enregistrer les commandes
-        getCommand("kit").setExecutor(new KitCommand(statsService));
+        getCommand("kit").setExecutor(new KitCommand(progressionService));
     }
 }

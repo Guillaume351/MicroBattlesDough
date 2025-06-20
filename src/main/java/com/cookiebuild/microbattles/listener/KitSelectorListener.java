@@ -12,19 +12,20 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.geysermc.geyser.api.GeyserApi;
 
-import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.service.PlayerMinigameProgressionService;
 import com.cookiebuild.microbattles.ui.ImprovedKitSelectionUI;
 
 public class KitSelectorListener implements Listener {
 
     private final ImprovedKitSelectionUI kitSelectionUI;
-    private final MinigameStatsService statsService;
+    private final PlayerMinigameProgressionService progressionService;
 
     public static final String KIT_SELECTOR_NAME = ChatColor.GOLD + "Kit Selector";
 
-    public KitSelectorListener(ImprovedKitSelectionUI kitSelectionUI, MinigameStatsService statsService) {
+    public KitSelectorListener(ImprovedKitSelectionUI kitSelectionUI,
+            PlayerMinigameProgressionService progressionService) {
         this.kitSelectionUI = kitSelectionUI;
-        this.statsService = statsService;
+        this.progressionService = progressionService;
     }
 
     @EventHandler

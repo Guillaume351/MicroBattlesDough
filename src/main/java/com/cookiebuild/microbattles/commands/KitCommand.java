@@ -6,7 +6,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.geysermc.geyser.api.GeyserApi;
 
-import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.service.PlayerMinigameProgressionService;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.ui.ImprovedKitSelectionUI;
 
@@ -14,8 +14,8 @@ public class KitCommand implements CommandExecutor {
 
     private final ImprovedKitSelectionUI kitSelectionUI;
 
-    public KitCommand(MinigameStatsService statsService) {
-        this.kitSelectionUI = new ImprovedKitSelectionUI(KitManager.getInstance(), statsService);
+    public KitCommand(PlayerMinigameProgressionService progressionService) {
+        this.kitSelectionUI = new ImprovedKitSelectionUI(KitManager.getInstance(), progressionService);
     }
 
     @Override

@@ -17,26 +17,30 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.geysermc.cumulus.form.SimpleForm;
 import org.geysermc.geyser.api.GeyserApi;
 
-import com.cookiebuild.cookiedough.model.MinigameStats;
-import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.model.PlayerMinigameProgression;
+import com.cookiebuild.cookiedough.service.PlayerMinigameProgressionService;
+import com.cookiebuild.cookiedough.service.PlayerMinigameProgressionService.PlayerGameStats;
 import com.cookiebuild.microbattles.kits.Kit;
 import com.cookiebuild.microbattles.kits.KitManager;
 
 public class ImprovedKitSelectionUI implements Listener {
 
     private final KitManager kitManager;
-    private final MinigameStatsService statsService;
+    private final PlayerMinigameProgressionService progressionService;
     private static final String JAVA_GUI_TITLE = ChatColor.DARK_AQUA + "Select Your Kit";
 
-    public ImprovedKitSelectionUI(KitManager kitManager, MinigameStatsService statsService) {
+    public ImprovedKitSelectionUI(KitManager kitManager, PlayerMinigameProgressionService progressionService) {
         this.kitManager = kitManager;
-        this.statsService = statsService;
+        this.progressionService = progressionService;
     }
 
     // --- Java Player GUI (Inventory) avec sections séparées ---
     public void openKitSelectionGUI(Player player) {
         UUID playerId = player.getUniqueId();
-        MinigameStats playerStats = statsService.getOrCreateStats(playerId, MinigameStatsService.MICROBATTLES);
+        PlayerMinigameProgression progression = progressionService.getOrCreateProgression(playerId,
+                PlayerMinigameProgressionService.MICROBATTLES);
+        PlayerGameStats gameStats = progressionService.calculateStats(playerId,
+                PlayerMinigameProgressionService.MICROBATTLES);
 
         List<Kit> allKits = kitManager.getAllKits();
         // Trier tous les kits par niveau requis d'abord
@@ -48,9 +52,12 @@ public class ImprovedKitSelectionUI implements Listener {
         List<Kit> lockedKits = new ArrayList<>();
 
         for (Kit kit : allKits) {
-            boolean unlocked = kitManager.isKitUnlocked(statsService, playerId, kit);
-            boolean hasLevel = kitManager.hasRequiredLevelForKit(statsService, playerId, kit);
-            boolean canAfford = kitManager.canAffordKit(statsService, playerId, kit);
+            boolean unlocked = progressionService.hasUnlockedKit(playerId,
+                    PlayerMinigameProgressionService.MICROBATTLES, kit.getName()) || kit.isDefaultUnlocked();
+            boolean hasLevel = progressionService.hasRequiredLevel(playerId,
+                    PlayerMinigameProgressionService.MICROBATTLES, kit.getRequiredLevel());
+            boolean canAfford = progressionService.canAffordKit(playerId, PlayerMinigameProgressionService.MICROBATTLES,
+                    kit.getPrice());
 
             if (unlocked) {
                 ownedKits.add(kit);
@@ -67,7 +74,7 @@ public class ImprovedKitSelectionUI implements Listener {
         Inventory gui = Bukkit.createInventory(null, inventorySize, JAVA_GUI_TITLE);
 
         // Ajouter les informations du joueur en haut
-        addPlayerInfoItems(gui, playerStats);
+        addPlayerInfoItems(gui, progression, gameStats);
 
         int currentSlot = 9; // Commencer après la première ligne
 
@@ -86,8 +93,10 @@ public class ImprovedKitSelectionUI implements Listener {
             addSectionHeader(gui, currentSlot, ChatColor.YELLOW + "$ Disponibles à l'achat", Material.GOLD_INGOT);
             currentSlot++;
             for (Kit kit : availableKits) {
-                boolean hasLevel = kitManager.hasRequiredLevelForKit(statsService, playerId, kit);
-                boolean canAfford = kitManager.canAffordKit(statsService, playerId, kit);
+                boolean hasLevel = progressionService.hasRequiredLevel(playerId,
+                        PlayerMinigameProgressionService.MICROBATTLES, kit.getRequiredLevel());
+                boolean canAfford = progressionService.canAffordKit(playerId,
+                        PlayerMinigameProgressionService.MICROBATTLES, kit.getPrice());
                 addKitItem(gui, currentSlot++, kit, playerId, false, hasLevel, canAfford);
             }
             currentSlot++; // Espace
@@ -98,8 +107,10 @@ public class ImprovedKitSelectionUI implements Listener {
             addSectionHeader(gui, currentSlot, ChatColor.RED + "✗ Kits Verrouillés", Material.BARRIER);
             currentSlot++;
             for (Kit kit : lockedKits) {
-                boolean hasLevel = kitManager.hasRequiredLevelForKit(statsService, playerId, kit);
-                boolean canAfford = kitManager.canAffordKit(statsService, playerId, kit);
+                boolean hasLevel = progressionService.hasRequiredLevel(playerId,
+                        PlayerMinigameProgressionService.MICROBATTLES, kit.getRequiredLevel());
+                boolean canAfford = progressionService.canAffordKit(playerId,
+                        PlayerMinigameProgressionService.MICROBATTLES, kit.getPrice());
                 addKitItem(gui, currentSlot++, kit, playerId, false, hasLevel, canAfford);
             }
         }
@@ -107,24 +118,25 @@ public class ImprovedKitSelectionUI implements Listener {
         player.openInventory(gui);
     }
 
-    private void addPlayerInfoItems(Inventory gui, MinigameStats stats) {
+    private void addPlayerInfoItems(Inventory gui, PlayerMinigameProgression progression, PlayerGameStats gameStats) {
         // Informations du joueur
         ItemStack playerInfo = new ItemStack(Material.PLAYER_HEAD);
         ItemMeta meta = playerInfo.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(ChatColor.AQUA + "Vos Statistiques MicroBattles");
             List<String> lore = new ArrayList<>();
-            lore.add(ChatColor.YELLOW + "Niveau: " + stats.getLevel());
-            lore.add(ChatColor.GOLD + "Pièces: " + stats.getCoins());
-            lore.add(ChatColor.GREEN + "XP: " + stats.getExperience() + "/" + stats.getExperienceForNextLevel());
-            lore.add(ChatColor.GRAY + "XP pour niveau suivant: " + stats.getExperienceToNextLevel());
+            lore.add(ChatColor.YELLOW + "Niveau: " + progression.getLevel());
+            lore.add(ChatColor.GOLD + "Pièces: " + progression.getCoins());
+            lore.add(ChatColor.GREEN + "XP: " + progression.getExperience() + "/"
+                    + progression.getExperienceForNextLevel());
+            lore.add(ChatColor.GRAY + "XP pour niveau suivant: " + progression.getExperienceToNextLevel());
             lore.add("");
-            lore.add(ChatColor.BLUE + "Victoires: " + stats.getWins());
-            lore.add(ChatColor.RED + "Défaites: " + stats.getLosses());
-            lore.add(ChatColor.GREEN + "Kills: " + stats.getKills());
-            lore.add(ChatColor.DARK_RED + "Morts: " + stats.getDeaths());
-            lore.add(ChatColor.YELLOW + "K/D Ratio: " + String.format("%.2f", stats.getKDRatio()));
-            lore.add(ChatColor.AQUA + "Taux de victoire: " + String.format("%.1f%%", stats.getWinRate()));
+            lore.add(ChatColor.BLUE + "Victoires: " + gameStats.getWins());
+            lore.add(ChatColor.RED + "Défaites: " + gameStats.getLosses());
+            lore.add(ChatColor.GREEN + "Kills: " + gameStats.getKills());
+            lore.add(ChatColor.DARK_RED + "Morts: " + gameStats.getDeaths());
+            lore.add(ChatColor.YELLOW + "K/D Ratio: " + String.format("%.2f", gameStats.getKDRatio()));
+            lore.add(ChatColor.AQUA + "Taux de victoire: " + String.format("%.1f%%", gameStats.getWinRate()));
             meta.setLore(lore);
             playerInfo.setItemMeta(meta);
         }
@@ -289,37 +301,29 @@ public class ImprovedKitSelectionUI implements Listener {
 
         UUID playerId = player.getUniqueId();
 
-        if (kitManager.isKitUnlocked(statsService, playerId, selectedKit)) {
+        if (progressionService.hasUnlockedKit(playerId, PlayerMinigameProgressionService.MICROBATTLES,
+                selectedKit.getName()) || selectedKit.isDefaultUnlocked()) {
             // Logique de sélection du kit
             storeKitSelection(player, selectedKit);
             player.sendMessage(ChatColor.GREEN + "Vous avez sélectionné le kit: " + selectedKit.getName());
             player.closeInventory();
             // TODO: Stocker le kit sélectionné pour la partie
         } else {
-            if (kitManager.hasRequiredLevelForKit(statsService, playerId, selectedKit)
-                    && kitManager.canAffordKit(statsService, playerId, selectedKit)) {
-                KitManager.PurchaseResult result = kitManager.purchaseKit(statsService, playerId, selectedKit);
-                switch (result) {
-                    case SUCCESS:
-                        player.sendMessage(
-                                ChatColor.GREEN + "Kit " + selectedKit.getName() + " acheté et sélectionné!");
-                        player.closeInventory();
-                        openKitSelectionGUI(player); // Refresh GUI
-                        break;
-                    case NOT_ENOUGH_COINS:
-                        player.sendMessage(ChatColor.RED + "Vous n'avez pas assez de pièces.");
-                        break;
-                    case LEVEL_TOO_LOW:
-                        player.sendMessage(ChatColor.RED + "Votre niveau est trop bas.");
-                        break;
-                    case ALREADY_UNLOCKED:
-                        player.sendMessage(ChatColor.YELLOW + "Vous possédez déjà ce kit.");
-                        break;
-                    case ERROR:
-                        player.sendMessage(ChatColor.RED + "Erreur lors de l'achat.");
-                        break;
+            if (progressionService.hasRequiredLevel(playerId, PlayerMinigameProgressionService.MICROBATTLES,
+                    selectedKit.getRequiredLevel())
+                    && progressionService.canAffordKit(playerId, PlayerMinigameProgressionService.MICROBATTLES,
+                            selectedKit.getPrice())) {
+                boolean purchaseSuccess = progressionService.purchaseKit(playerId,
+                        PlayerMinigameProgressionService.MICROBATTLES, selectedKit.getName(), selectedKit.getPrice());
+                if (purchaseSuccess) {
+                    player.sendMessage(ChatColor.GREEN + "Kit " + selectedKit.getName() + " acheté et sélectionné!");
+                    player.closeInventory();
+                    openKitSelectionGUI(player); // Refresh GUI
+                } else {
+                    player.sendMessage(ChatColor.RED + "Erreur lors de l'achat.");
                 }
-            } else if (!kitManager.hasRequiredLevelForKit(statsService, playerId, selectedKit)) {
+            } else if (!progressionService.hasRequiredLevel(playerId, PlayerMinigameProgressionService.MICROBATTLES,
+                    selectedKit.getRequiredLevel())) {
                 player.sendMessage(ChatColor.RED + "Niveau " + selectedKit.getRequiredLevel() + " requis.");
             } else {
                 player.sendMessage(ChatColor.RED + "Pas assez de pièces.");
@@ -335,13 +339,18 @@ public class ImprovedKitSelectionUI implements Listener {
         }
 
         UUID playerId = player.getUniqueId();
-        MinigameStats playerStats = statsService.getOrCreateStats(playerId, MinigameStatsService.MICROBATTLES);
+        PlayerMinigameProgression progression = progressionService.getOrCreateProgression(playerId,
+                PlayerMinigameProgressionService.MICROBATTLES);
+        PlayerGameStats gameStats = progressionService.calculateStats(playerId,
+                PlayerMinigameProgressionService.MICROBATTLES);
 
         SimpleForm.Builder formBuilder = SimpleForm.builder()
                 .title("Sélection de Kit - MicroBattles")
-                .content(String.format("Niveau: %d | Pièces: %d | XP: %d/%d\n\n",
-                        playerStats.getLevel(), playerStats.getCoins(),
-                        playerStats.getExperience(), playerStats.getExperienceForNextLevel()));
+                .content(String.format(
+                        "Niveau: %d | Pièces: %d | XP: %d/%d\nVictoires: %d | Défaites: %d | K/D: %.2f\n\n",
+                        progression.getLevel(), progression.getCoins(),
+                        progression.getExperience(), progression.getExperienceForNextLevel(),
+                        gameStats.getWins(), gameStats.getLosses(), gameStats.getKDRatio()));
 
         List<Kit> allKits = kitManager.getAllKits();
         // Trier les kits par niveau requis
@@ -353,9 +362,12 @@ public class ImprovedKitSelectionUI implements Listener {
         List<Kit> lockedKits = new ArrayList<>();
 
         for (Kit kit : allKits) {
-            boolean unlocked = kitManager.isKitUnlocked(statsService, playerId, kit);
-            boolean hasLevel = kitManager.hasRequiredLevelForKit(statsService, playerId, kit);
-            boolean canAfford = kitManager.canAffordKit(statsService, playerId, kit);
+            boolean unlocked = progressionService.hasUnlockedKit(playerId,
+                    PlayerMinigameProgressionService.MICROBATTLES, kit.getName()) || kit.isDefaultUnlocked();
+            boolean hasLevel = progressionService.hasRequiredLevel(playerId,
+                    PlayerMinigameProgressionService.MICROBATTLES, kit.getRequiredLevel());
+            boolean canAfford = progressionService.canAffordKit(playerId, PlayerMinigameProgressionService.MICROBATTLES,
+                    kit.getPrice());
 
             if (unlocked) {
                 ownedKits.add(kit);
@@ -377,7 +389,8 @@ public class ImprovedKitSelectionUI implements Listener {
         }
         for (Kit kit : lockedKits) {
             String buttonText = "✗ " + kit.getName() + " (";
-            if (!kitManager.hasRequiredLevelForKit(statsService, playerId, kit)) {
+            if (!progressionService.hasRequiredLevel(playerId, PlayerMinigameProgressionService.MICROBATTLES,
+                    kit.getRequiredLevel())) {
                 buttonText += "Niveau " + kit.getRequiredLevel() + " requis";
             } else {
                 buttonText += kit.getPrice() + " pièces";
@@ -393,19 +406,24 @@ public class ImprovedKitSelectionUI implements Listener {
         formBuilder.validResultHandler(response -> {
             Kit selectedKit = allKits.get(response.clickedButtonId());
 
-            if (kitManager.isKitUnlocked(statsService, playerId, selectedKit)) {
+            if (progressionService.hasUnlockedKit(playerId, PlayerMinigameProgressionService.MICROBATTLES,
+                    selectedKit.getName()) || selectedKit.isDefaultUnlocked()) {
                 storeKitSelection(player, selectedKit);
                 player.sendMessage(ChatColor.GREEN + "Vous avez sélectionné le kit: " + selectedKit.getName());
             } else {
-                if (kitManager.hasRequiredLevelForKit(statsService, playerId, selectedKit)
-                        && kitManager.canAffordKit(statsService, playerId, selectedKit)) {
-                    KitManager.PurchaseResult result = kitManager.purchaseKit(statsService, playerId, selectedKit);
-                    if (result == KitManager.PurchaseResult.SUCCESS) {
+                if (progressionService.hasRequiredLevel(playerId, PlayerMinigameProgressionService.MICROBATTLES,
+                        selectedKit.getRequiredLevel())
+                        && progressionService.canAffordKit(playerId, PlayerMinigameProgressionService.MICROBATTLES,
+                                selectedKit.getPrice())) {
+                    boolean purchaseSuccess = progressionService.purchaseKit(playerId,
+                            PlayerMinigameProgressionService.MICROBATTLES, selectedKit.getName(),
+                            selectedKit.getPrice());
+                    if (purchaseSuccess) {
                         player.sendMessage(
                                 ChatColor.GREEN + "Kit " + selectedKit.getName() + " acheté et sélectionné!");
                         openKitSelectionForm(player); // Refresh form
                     } else {
-                        player.sendMessage(ChatColor.RED + "Impossible d'acheter le kit. Raison: " + result.toString());
+                        player.sendMessage(ChatColor.RED + "Impossible d'acheter le kit.");
                         openKitSelectionForm(player);
                     }
                 } else {
