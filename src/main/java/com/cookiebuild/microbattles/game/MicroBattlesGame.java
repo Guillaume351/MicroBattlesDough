@@ -193,6 +193,12 @@ public class MicroBattlesGame extends Game {
             selectedKit.equipPlayer(player.getPlayer());
             equippedKits.put(player.getPlayer().getUniqueId().toString(), selectedKit);
 
+            // Modifier le nom d'affichage pour inclure le kit
+            String originalName = player.getPlayer().getName();
+            String kitDisplayName = "§f" + originalName + "\n§7[" + selectedKit.getName() + "]";
+            player.getPlayer().setDisplayName(kitDisplayName);
+            player.getPlayer().setPlayerListName(kitDisplayName);
+
             // Informer le joueur
             player.getPlayer().sendMessage("§a"
                     + LocaleManager.getMessage("kit.equipped", player.getPlayer().locale(), selectedKit.getName()));
@@ -567,6 +573,10 @@ public class MicroBattlesGame extends Game {
         for (MicroBattlesTeam team : teams.values()) {
             team.removePlayer(player);
         }
+
+        // Reset player display name when leaving the game
+        player.getPlayer().setDisplayName(player.getPlayer().getName());
+        player.getPlayer().setPlayerListName(player.getPlayer().getName());
 
         scoreboardManager.removeScoreboard(player.getPlayer());
         if (getState() == GameState.RUNNING) {
