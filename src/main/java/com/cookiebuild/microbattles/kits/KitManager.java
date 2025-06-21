@@ -47,7 +47,7 @@ public class KitManager {
     }
 
     private void createDefaultKit() {
-        Kit defaultKit = new Kit("Default", 0, 0, true, "A balanced starting kit for everyone.");
+        Kit defaultKit = new Kit("Default", 0, 0, true, "kit.default.description");
         defaultKit.addItem(Material.STONE_SWORD, 1);
         defaultKit.addItem(Material.BOW, 1);
         defaultKit.addItem(Material.GOLDEN_PICKAXE, 1);
@@ -59,8 +59,7 @@ public class KitManager {
     }
 
     private void createExplosiveArcherKit() {
-        Kit explosiveArcherKit = new Kit("Explosive Archer", 120, 7, false,
-                "Flèches explosives ! Chaque flèche crée une explosion de 2.5 blocs infligeant 6 cœurs de dégâts et projetant les ennemis.");
+        Kit explosiveArcherKit = new Kit("Explosive Archer", 120, 7, false, "kit.explosive_archer.description");
         explosiveArcherKit.addItem(Material.BOW, 1, Enchantment.INFINITY, 1);
         explosiveArcherKit.addItem(Material.ARROW, 1);
         explosiveArcherKit.addItem(Material.TNT, 8);
@@ -70,8 +69,7 @@ public class KitManager {
     }
 
     private void createEndermanKit() {
-        Kit endermanKit = new Kit("Enderman", 250, 16, false,
-                "Teleport around with ender pearls and confuse your enemies.");
+        Kit endermanKit = new Kit("Enderman", 250, 16, false, "kit.enderman.description");
         endermanKit.addItem(Material.ENDER_PEARL, 12);
         endermanKit.addItem(Material.IRON_SWORD, 1);
         endermanKit.addItem(Material.CHORUS_FRUIT, 3);
@@ -81,8 +79,7 @@ public class KitManager {
     }
 
     private void createKnockbackWarriorKit() {
-        Kit knockbackWarriorKit = new Kit("Knockback Warrior", 50, 0, true,
-                "Push your enemies off edges! Wield the mighty 'Big Stick'.");
+        Kit knockbackWarriorKit = new Kit("Knockback Warrior", 50, 0, true, "kit.knockback_warrior.description");
         ItemStack kbStick = new ItemStack(Material.STICK);
         kbStick.addUnsafeEnchantment(Enchantment.KNOCKBACK, 5);
         ItemMeta meta = kbStick.getItemMeta();
@@ -97,8 +94,7 @@ public class KitManager {
     }
 
     private void createTankKit() {
-        Kit tankKit = new Kit("Tank", 230, 15, false,
-                "Absorbez les dégâts et protégez votre équipe. Très lent mais résistant. (Slowness I & Resistance I permanents)");
+        Kit tankKit = new Kit("Tank", 230, 15, false, "kit.tank.description");
         tankKit.addItem(Material.DIAMOND_SWORD, 1);
         tankKit.addItem(Material.SHIELD, 1);
         tankKit.addItem(Material.GOLDEN_APPLE, 3);
@@ -110,8 +106,7 @@ public class KitManager {
     }
 
     private void createNinjaKit() {
-        Kit ninjaKit = new Kit("Ninja", 300, 22, false,
-                "Furtivité avancée ! Double-sneak pour invisibilité (6s) + Speed II + Night Vision. Cooldown: 25s.");
+        Kit ninjaKit = new Kit("Ninja", 300, 22, false, "kit.ninja.description");
         ninjaKit.addItem(Material.IRON_SWORD, 1, Enchantment.SHARPNESS, 1);
         ninjaKit.addItem(Material.ENDER_PEARL, 5);
         ninjaKit.addItemStack(PotionUtil.createPotion(PotionEffectType.SPEED, 1800, 1), 1);
@@ -124,7 +119,7 @@ public class KitManager {
     // createPyromancerKit() method fully removed
 
     private void createArcherKit() {
-        Kit archerKit = new Kit("Archer", 0, 0, true, "A classic ranged kit with a powerful bow.");
+        Kit archerKit = new Kit("Archer", 0, 0, true, "kit.archer.description");
         archerKit.addItem(Material.BOW, 1, Enchantment.POWER, 2);
         archerKit.addItem(Material.ARROW, 32);
         archerKit.addItem(Material.WOODEN_SWORD, 1);
@@ -134,8 +129,7 @@ public class KitManager {
     }
 
     private void createBerserkerKit() {
-        Kit berserkerKit = new Kit("Berserker", 150, 8, false,
-                "Rage conditionnelle ! Gagne Strength I + Speed I à 50% de vie, Strength II à 25% de vie. Plus c'est dangereux, plus c'est puissant !");
+        Kit berserkerKit = new Kit("Berserker", 150, 8, false, "kit.berserker.description");
         berserkerKit.addItem(Material.DIAMOND_AXE, 1, Enchantment.SHARPNESS, 2);
         berserkerKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS,
                 Material.LEATHER_BOOTS);
@@ -143,8 +137,7 @@ public class KitManager {
     }
 
     private void createChemistKit() {
-        Kit chemistKit = new Kit("Chemist", 280, 20, false,
-                "Utilisez des potions splash nocives pour affaiblir vos ennemis à distance. Poison, dégâts instantanés et ralentissement !");
+        Kit chemistKit = new Kit("Chemist", 280, 20, false, "kit.chemist.description");
         chemistKit.addItemStack(PotionUtil.createSplashPotion(PotionEffectType.INSTANT_DAMAGE, 0, 0), 3);
         chemistKit.addItemStack(PotionUtil.createSplashPotion(PotionEffectType.POISON, 300, 0), 2);
         chemistKit.addItemStack(PotionUtil.createSplashPotion(PotionEffectType.SLOWNESS, 300, 1), 2);
@@ -155,8 +148,7 @@ public class KitManager {
     }
 
     private void createAssassinKit() {
-        Kit assassinKit = new Kit("Assassin", 350, 28, false,
-                "Attaque sournoise ! Double-sneak pour invisibilité (6s). Premier coup après invisibilité = 200% de dégâts ! Cooldown: 20s.");
+        Kit assassinKit = new Kit("Assassin", 350, 28, false, "kit.assassin.description");
         ItemStack dagger = new ItemStack(Material.GOLDEN_SWORD);
         dagger.addUnsafeEnchantment(Enchantment.SHARPNESS, 3);
         ItemMeta daggerMeta = dagger.getItemMeta();
@@ -176,8 +168,7 @@ public class KitManager {
     }
 
     private void createMinerKit() {
-        Kit minerKit = new Kit("Miner", 80, 3, false,
-                "Quickly gather resources and build defenses. Starts with an efficient pickaxe.");
+        Kit minerKit = new Kit("Miner", 80, 3, false, "kit.miner.description");
         minerKit.addItem(Material.DIAMOND_PICKAXE, 1, Enchantment.EFFICIENCY, 2);
         minerKit.addItem(Material.OAK_WOOD, 32);
         minerKit.addItem(Material.COBBLESTONE, 64);
@@ -187,8 +178,7 @@ public class KitManager {
     }
 
     private void createVampireKit() {
-        Kit vampireKit = new Kit("Vampire", 220, 14, false,
-                "Lifesteal puissant ! Récupère 50% des dégâts infligés en vie (max 2 cœurs). 25% de chance d'infliger Weakness aux victimes.");
+        Kit vampireKit = new Kit("Vampire", 220, 14, false, "kit.vampire.description");
         ItemStack vampireSword = new ItemStack(Material.IRON_SWORD);
         ItemMeta vampireMeta = vampireSword.getItemMeta();
         if (vampireMeta != null) {
@@ -202,8 +192,7 @@ public class KitManager {
     }
 
     private void createFrostMageKit() {
-        Kit frostMageKit = new Kit("Frost Mage", 320, 25, false,
-                "Maîtrise de la glace ! Passif: Speed II sur glace. Actif: Pont de glace (20 blocs) + zone de gel (Slowness III). Cooldown: 8s.");
+        Kit frostMageKit = new Kit("Frost Mage", 320, 25, false, "kit.frost_mage.description");
         ItemStack iceWand = new ItemStack(Material.STICK);
         iceWand.addUnsafeEnchantment(Enchantment.KNOCKBACK, 1);
         ItemMeta wandMeta = iceWand.getItemMeta();
@@ -224,8 +213,7 @@ public class KitManager {
     }
 
     private void createJuggernautKit() {
-        Kit juggernautKit = new Kit("Juggernaut", 400, 30, false,
-                "Force imparable ! Extrêmement résistant et fort, mais très lent. (Slowness II & Resistance II permanents)");
+        Kit juggernautKit = new Kit("Juggernaut", 400, 30, false, "kit.juggernaut.description");
         juggernautKit.addItem(Material.NETHERITE_AXE, 1, Enchantment.SHARPNESS, 1);
         juggernautKit.addItem(Material.SHIELD, 1);
         juggernautKit.addItem(Material.ENCHANTED_GOLDEN_APPLE, 1);
@@ -238,8 +226,7 @@ public class KitManager {
     }
 
     private void createTrapperKit() {
-        Kit trapperKit = new Kit("Trapper", 100, 5, false,
-                "Set up deadly traps for unsuspecting foes. Good for area denial.");
+        Kit trapperKit = new Kit("Trapper", 100, 5, false, "kit.trapper.description");
         trapperKit.addItem(Material.STONE_SWORD, 1);
         trapperKit.addItem(Material.TRIPWIRE_HOOK, 12);
         trapperKit.addItem(Material.STRING, 48);
@@ -252,8 +239,7 @@ public class KitManager {
     }
 
     private void createAlchemistKit() {
-        Kit alchemistKit = new Kit("Alchemist", 200, 12, false,
-                "Brassage intelligent ! 4 potions aléatoires: Combat (Strength II + Resistance), Mobilité (Speed III + Jump), Guérison (Regen III + Absorption), Tactique (Invisibilité + Night Vision). Cooldown: 12s.");
+        Kit alchemistKit = new Kit("Alchemist", 200, 12, false, "kit.alchemist.description");
         alchemistKit.addItem(Material.IRON_SWORD, 1);
         alchemistKit.addItem(Material.BREWING_STAND, 1);
         alchemistKit.addItem(Material.NETHER_WART, 5);

@@ -21,6 +21,7 @@ import org.geysermc.geyser.api.GeyserApi;
 import com.cookiebuild.cookiedough.model.MinigameStats;
 import com.cookiebuild.cookiedough.model.PlayerData;
 import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.kits.Kit;
 import com.cookiebuild.microbattles.kits.KitManager;
 
@@ -69,10 +70,14 @@ public class KitSelectionUI implements Listener {
                     }
                 }
                 lore.add(""); // Ligne vide
-                if (kit.getDescription() != null && !kit.getDescription().isEmpty()) {
+                // Obtenir la description localisée (utilise la locale du serveur par défaut)
+                java.util.Locale playerLocale = java.util.Locale.ENGLISH; // Par défaut
+                String localizedDescription = kit.getLocalizedDescription(playerLocale);
+
+                if (localizedDescription != null && !localizedDescription.isEmpty()) {
                     lore.add(ChatColor.DARK_GRAY + "--------------------");
                     // Simple word wrap for description
-                    String[] words = kit.getDescription().split(" ");
+                    String[] words = localizedDescription.split(" ");
                     String currentLine = ChatColor.GRAY.toString();
                     for (String word : words) {
                         if (currentLine.length() + word.length() + 1 > 40) { // Max line length (approx)
@@ -129,7 +134,8 @@ public class KitSelectionUI implements Listener {
 
         if (kitManager.isKitUnlocked(statsService, playerId, selectedKit)) {
             // Logique de sélection du kit (par exemple, stocker le choix du joueur)
-            player.sendMessage(ChatColor.GREEN + "You selected kit: " + selectedKit.getName());
+            player.sendMessage(
+                    ChatColor.GREEN + LocaleManager.getMessage("kit.selected", player.locale(), selectedKit.getName()));
             // kitManager.selectKit(playerData, selectedKit); // Déplacer cette logique dans
             // le jeu
             player.closeInventory();
@@ -140,8 +146,8 @@ public class KitSelectionUI implements Listener {
                 KitManager.PurchaseResult result = kitManager.purchaseKit(statsService, playerId, selectedKit);
                 switch (result) {
                     case SUCCESS:
-                        player.sendMessage(
-                                ChatColor.GREEN + "Kit " + selectedKit.getName() + " purchased and selected!");
+                        player.sendMessage(ChatColor.GREEN + LocaleManager.getMessage("kit.purchased_and_selected",
+                                player.locale(), selectedKit.getName()));
                         // playerDataService.savePlayerData(playerData); // IMPORTANT: Sauvegarder les
                         // données
                         // kitManager.selectKit(playerData, selectedKit);
@@ -149,23 +155,27 @@ public class KitSelectionUI implements Listener {
                         openKitSelectionGUI(player); // Refresh GUI
                         break;
                     case NOT_ENOUGH_COINS:
-                        player.sendMessage(ChatColor.RED + "You don't have enough coins to purchase this kit.");
+                        player.sendMessage(
+                                ChatColor.RED + LocaleManager.getMessage("kit.not_enough_coins", player.locale()));
                         break;
                     case LEVEL_TOO_LOW:
-                        player.sendMessage(ChatColor.RED + "You don't have the required level to purchase this kit.");
+                        player.sendMessage(
+                                ChatColor.RED + LocaleManager.getMessage("kit.level_too_low", player.locale()));
                         break;
                     case ALREADY_UNLOCKED: // Ne devrait pas arriver ici si la logique est correcte
-                        player.sendMessage(ChatColor.YELLOW + "You have already unlocked this kit.");
+                        player.sendMessage(
+                                ChatColor.YELLOW + LocaleManager.getMessage("kit.already_unlocked", player.locale()));
                         break;
                     case ERROR:
-                        player.sendMessage(ChatColor.RED + "An error occurred while purchasing the kit.");
+                        player.sendMessage(
+                                ChatColor.RED + LocaleManager.getMessage("kit.purchase_error", player.locale()));
                         break;
                 }
             } else if (!kitManager.hasRequiredLevelForKit(statsService, playerId, selectedKit)) {
-                player.sendMessage(
-                        ChatColor.RED + "You need level " + selectedKit.getRequiredLevel() + " to purchase this kit.");
+                player.sendMessage(ChatColor.RED
+                        + LocaleManager.getMessage("kit.need_level", player.locale(), selectedKit.getRequiredLevel()));
             } else {
-                player.sendMessage(ChatColor.RED + "You cannot afford this kit.");
+                player.sendMessage(ChatColor.RED + LocaleManager.getMessage("kit.cannot_afford", player.locale()));
             }
         }
     }
@@ -208,14 +218,16 @@ public class KitSelectionUI implements Listener {
 
         formBuilder.closedOrInvalidResultHandler(() -> {
             // Le joueur a fermé le formulaire sans choisir
-            player.sendMessage(ChatColor.YELLOW + "Kit selection cancelled.");
+            player.sendMessage(
+                    ChatColor.YELLOW + LocaleManager.getMessage("kit.selection_cancelled", java.util.Locale.ENGLISH));
         });
 
         formBuilder.validResultHandler(response -> {
             Kit selectedKit = allKits.get(response.clickedButtonId());
 
             if (kitManager.isKitUnlocked(statsService, playerId, selectedKit)) {
-                player.sendMessage(ChatColor.GREEN + "You selected kit: " + selectedKit.getName());
+                player.sendMessage(ChatColor.GREEN
+                        + LocaleManager.getMessage("kit.selected", java.util.Locale.ENGLISH, selectedKit.getName()));
                 // kitManager.selectKit(statsService, playerId, selectedKit);
                 // Équiper ou marquer pour la prochaine partie
             } else {
@@ -224,17 +236,19 @@ public class KitSelectionUI implements Listener {
                         && kitManager.canAffordKit(statsService, playerId, selectedKit)) {
                     KitManager.PurchaseResult result = kitManager.purchaseKit(statsService, playerId, selectedKit);
                     if (result == KitManager.PurchaseResult.SUCCESS) {
-                        player.sendMessage(
-                                ChatColor.GREEN + "Kit " + selectedKit.getName() + " purchased and selected!");
+                        player.sendMessage(ChatColor.GREEN + LocaleManager.getMessage("kit.purchased_and_selected",
+                                java.util.Locale.ENGLISH, selectedKit.getName()));
                         // playerDataService.savePlayerData(playerDataResponse); // Sauvegarder
                         // kitManager.selectKit(playerDataResponse, selectedKit);
                         openKitSelectionForm(player); // Refresh form
                     } else {
-                        player.sendMessage(ChatColor.RED + "Could not purchase kit. Reason: " + result.toString());
+                        player.sendMessage(ChatColor.RED + LocaleManager.getMessage("kit.could_not_purchase",
+                                java.util.Locale.ENGLISH, result.toString()));
                         openKitSelectionForm(player); // Refresh form
                     }
                 } else {
-                    player.sendMessage(ChatColor.RED + "You cannot purchase this kit (level or coins).");
+                    player.sendMessage(
+                            ChatColor.RED + LocaleManager.getMessage("kit.cannot_purchase", java.util.Locale.ENGLISH));
                     openKitSelectionForm(player); // Refresh form
                 }
             }
@@ -247,7 +261,12 @@ public class KitSelectionUI implements Listener {
         ModalForm.Builder confirmationForm = ModalForm.builder()
                 .title(kit.getName());
 
-        String contentText = kit.getDescription() + "\n\n";
+        // Obtenir la description localisée pour Bedrock
+        // Obtenir la description localisée pour Bedrock (utilise la locale du serveur
+        // par défaut)
+        java.util.Locale playerLocale = java.util.Locale.ENGLISH; // Par défaut
+        String localizedDescription = kit.getLocalizedDescription(playerLocale);
+        String contentText = localizedDescription + "\n\n";
         UUID playerId = player.getUniqueId();
         boolean unlocked = kitManager.isKitUnlocked(statsService, playerId, kit);
         boolean canAfford = kitManager.canAffordKit(statsService, playerId, kit);
@@ -284,17 +303,20 @@ public class KitSelectionUI implements Listener {
         confirmationForm.validResultHandler(response -> {
             if (response.clickedButtonId() == 0) { // Bouton 1 cliqué
                 if (unlocked || kit.isDefaultUnlocked()) {
-                    player.sendMessage(ChatColor.GREEN + "You selected kit: " + kit.getName());
+                    player.sendMessage(ChatColor.GREEN
+                            + LocaleManager.getMessage("kit.selected", java.util.Locale.ENGLISH, kit.getName()));
                     // kitManager.selectKit(playerData, kit);
                 } else if (hasLevel && canAfford) {
                     KitManager.PurchaseResult result = kitManager.purchaseKit(statsService, playerId, kit);
                     if (result == KitManager.PurchaseResult.SUCCESS) {
-                        player.sendMessage(ChatColor.GREEN + "Kit " + kit.getName() + " purchased and selected!");
+                        player.sendMessage(ChatColor.GREEN + LocaleManager.getMessage("kit.purchased_and_selected",
+                                java.util.Locale.ENGLISH, kit.getName()));
                         // playerDataService.savePlayerData(playerData);
                         // kitManager.selectKit(playerData, kit);
                         openKitSelectionForm(player);
                     } else {
-                        player.sendMessage(ChatColor.RED + "Could not purchase kit. Reason: " + result.toString());
+                        player.sendMessage(ChatColor.RED + LocaleManager.getMessage("kit.could_not_purchase",
+                                java.util.Locale.ENGLISH, result.toString()));
                         openKitSelectionForm(player);
                     }
                 } else {

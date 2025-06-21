@@ -20,6 +20,7 @@ import org.geysermc.geyser.api.GeyserApi;
 import com.cookiebuild.cookiedough.model.PlayerMinigameProgression;
 import com.cookiebuild.cookiedough.service.PlayerMinigameProgressionService;
 import com.cookiebuild.cookiedough.service.PlayerMinigameProgressionService.PlayerGameStats;
+import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.kits.Kit;
 import com.cookiebuild.microbattles.kits.KitManager;
 
@@ -239,10 +240,14 @@ public class ImprovedKitSelectionUI implements Listener {
             }
 
             lore.add(""); // Ligne vide
-            if (kit.getDescription() != null && !kit.getDescription().isEmpty()) {
+            // Obtenir la description localisée
+            java.util.Locale playerLocale = java.util.Locale.ENGLISH; // Par défaut
+            String localizedDescription = kit.getLocalizedDescription(playerLocale);
+
+            if (localizedDescription != null && !localizedDescription.isEmpty()) {
                 lore.add(ChatColor.DARK_GRAY + "--------------------");
                 // Word wrap pour la description
-                String[] words = kit.getDescription().split(" ");
+                String[] words = localizedDescription.split(" ");
                 String currentLine = ChatColor.GRAY.toString();
                 for (String word : words) {
                     if (currentLine.length() + word.length() + 1 > 40) {
@@ -305,7 +310,8 @@ public class ImprovedKitSelectionUI implements Listener {
                 selectedKit.getName()) || selectedKit.isDefaultUnlocked()) {
             // Logique de sélection du kit
             storeKitSelection(player, selectedKit);
-            player.sendMessage(ChatColor.GREEN + "Vous avez sélectionné le kit: " + selectedKit.getName());
+            player.sendMessage(ChatColor.GREEN
+                    + LocaleManager.getMessage("ui.you_selected_kit", java.util.Locale.ENGLISH, selectedKit.getName()));
             player.closeInventory();
             // TODO: Stocker le kit sélectionné pour la partie
         } else {
@@ -316,17 +322,21 @@ public class ImprovedKitSelectionUI implements Listener {
                 boolean purchaseSuccess = progressionService.purchaseKit(playerId,
                         PlayerMinigameProgressionService.MICROBATTLES, selectedKit.getName(), selectedKit.getPrice());
                 if (purchaseSuccess) {
-                    player.sendMessage(ChatColor.GREEN + "Kit " + selectedKit.getName() + " acheté et sélectionné!");
+                    player.sendMessage(ChatColor.GREEN + LocaleManager.getMessage("ui.kit_purchased_selected",
+                            java.util.Locale.ENGLISH, selectedKit.getName()));
                     player.closeInventory();
                     openKitSelectionGUI(player); // Refresh GUI
                 } else {
-                    player.sendMessage(ChatColor.RED + "Erreur lors de l'achat.");
+                    player.sendMessage(
+                            ChatColor.RED + LocaleManager.getMessage("ui.purchase_error", java.util.Locale.ENGLISH));
                 }
             } else if (!progressionService.hasRequiredLevel(playerId, PlayerMinigameProgressionService.MICROBATTLES,
                     selectedKit.getRequiredLevel())) {
-                player.sendMessage(ChatColor.RED + "Niveau " + selectedKit.getRequiredLevel() + " requis.");
+                player.sendMessage(ChatColor.RED + LocaleManager.getMessage("ui.level_required",
+                        java.util.Locale.ENGLISH, selectedKit.getRequiredLevel()));
             } else {
-                player.sendMessage(ChatColor.RED + "Pas assez de pièces.");
+                player.sendMessage(
+                        ChatColor.RED + LocaleManager.getMessage("ui.not_enough_coins", java.util.Locale.ENGLISH));
             }
         }
     }
@@ -400,7 +410,8 @@ public class ImprovedKitSelectionUI implements Listener {
         }
 
         formBuilder.closedOrInvalidResultHandler(() -> {
-            player.sendMessage(ChatColor.YELLOW + "Sélection de kit annulée.");
+            player.sendMessage(
+                    ChatColor.YELLOW + LocaleManager.getMessage("ui.selection_cancelled", java.util.Locale.ENGLISH));
         });
 
         formBuilder.validResultHandler(response -> {
@@ -409,7 +420,8 @@ public class ImprovedKitSelectionUI implements Listener {
             if (progressionService.hasUnlockedKit(playerId, PlayerMinigameProgressionService.MICROBATTLES,
                     selectedKit.getName()) || selectedKit.isDefaultUnlocked()) {
                 storeKitSelection(player, selectedKit);
-                player.sendMessage(ChatColor.GREEN + "Vous avez sélectionné le kit: " + selectedKit.getName());
+                player.sendMessage(ChatColor.GREEN + LocaleManager.getMessage("ui.you_selected_kit",
+                        java.util.Locale.ENGLISH, selectedKit.getName()));
             } else {
                 if (progressionService.hasRequiredLevel(playerId, PlayerMinigameProgressionService.MICROBATTLES,
                         selectedKit.getRequiredLevel())
@@ -423,11 +435,13 @@ public class ImprovedKitSelectionUI implements Listener {
                                 ChatColor.GREEN + "Kit " + selectedKit.getName() + " acheté et sélectionné!");
                         openKitSelectionForm(player); // Refresh form
                     } else {
-                        player.sendMessage(ChatColor.RED + "Impossible d'acheter le kit.");
+                        player.sendMessage(ChatColor.RED
+                                + LocaleManager.getMessage("ui.unable_to_purchase", java.util.Locale.ENGLISH));
                         openKitSelectionForm(player);
                     }
                 } else {
-                    player.sendMessage(ChatColor.RED + "Vous ne pouvez pas acheter ce kit.");
+                    player.sendMessage(ChatColor.RED
+                            + LocaleManager.getMessage("ui.cannot_purchase_kit", java.util.Locale.ENGLISH));
                     openKitSelectionForm(player);
                 }
             }
@@ -442,6 +456,7 @@ public class ImprovedKitSelectionUI implements Listener {
     private void storeKitSelection(Player player, Kit selectedKit) {
         // Pour l'instant, on stocke la sélection dans un message au joueur
         // L'intégration complète avec MicroBattlesGame sera faite plus tard
-        player.sendMessage(ChatColor.GRAY + "Kit " + selectedKit.getName() + " sélectionné pour la prochaine partie !");
+        player.sendMessage(ChatColor.GRAY + LocaleManager.getMessage("kit.selected_for_next_game",
+                java.util.Locale.ENGLISH, selectedKit.getName()));
     }
 }

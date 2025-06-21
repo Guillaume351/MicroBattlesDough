@@ -7,6 +7,7 @@ import org.bukkit.entity.Player;
 import org.geysermc.geyser.api.GeyserApi;
 
 import com.cookiebuild.cookiedough.service.PlayerMinigameProgressionService;
+import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.ui.ImprovedKitSelectionUI;
 
@@ -21,7 +22,7 @@ public class KitCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage("Cette commande ne peut être utilisée que par un joueur.");
+            sender.sendMessage(LocaleManager.getMessage("command.player_only", java.util.Locale.ENGLISH));
             return true;
         }
 

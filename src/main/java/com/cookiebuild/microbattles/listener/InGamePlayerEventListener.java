@@ -24,6 +24,7 @@ import com.cookiebuild.cookiedough.listener.BaseEventBlocker;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
 import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.player.PlayerState;
+import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
 
 public class InGamePlayerEventListener extends BaseEventBlocker {
@@ -142,7 +143,8 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
             Player killer = player.getKiller();
             if (killer != null) {
                 // Send a message to the killer
-                killer.sendMessage("§aYou killed " + player.getName() + "!");
+                killer.sendMessage(
+                        "§a" + LocaleManager.getMessage("game.player_eliminated", killer.locale(), player.getName()));
                 // play a sound to the killer
                 killer.playSound(killer.getLocation(), Sound.ENTITY_PLAYER_DEATH, 1, 1);
             }

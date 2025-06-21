@@ -194,7 +194,8 @@ public class MicroBattlesGame extends Game {
             equippedKits.put(player.getPlayer().getUniqueId().toString(), selectedKit);
 
             // Informer le joueur
-            player.getPlayer().sendMessage("§aYou have been equipped with the §6" + selectedKit.getName() + " §akit!");
+            player.getPlayer().sendMessage("§a"
+                    + LocaleManager.getMessage("kit.equipped", player.getPlayer().locale(), selectedKit.getName()));
             player.getPlayer().showTitle(
                     Title.title(
                             Component.text("§6" + selectedKit.getName()),
@@ -220,7 +221,8 @@ public class MicroBattlesGame extends Game {
         World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
 
         if (gameWorld == null) {
-            player.getPlayer().sendMessage("Error: The game world is not loaded.");
+            player.getPlayer()
+                    .sendMessage(LocaleManager.getMessage("game.world_not_loaded", player.getPlayer().locale()));
             return;
         }
 
@@ -687,10 +689,11 @@ public class MicroBattlesGame extends Game {
                         playerTeamsEliminatedThisMatch.getOrDefault(killerId, 0) + 1);
             }
 
-            killer.getPlayer().sendMessage(Component.text("You eliminated ")
-                    .color(NamedTextColor.GREEN)
-                    .append(Component.text(getColoredPlayerName(victim)))
-                    .append(Component.text("!")));
+            killer.getPlayer()
+                    .sendMessage(Component
+                            .text(LocaleManager.getMessage("game.player_eliminated", killer.getPlayer().locale(),
+                                    victim.getPlayer().getName()))
+                            .color(NamedTextColor.GREEN));
         }
 
         victim.getPlayer().setGameMode(GameMode.SPECTATOR);

@@ -2,11 +2,14 @@ package com.cookiebuild.microbattles.kits;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+
+import com.cookiebuild.cookiedough.utils.LocaleManager;
 
 public class Kit {
     private final String name;
@@ -81,5 +84,10 @@ public class Kit {
 
     public String getDescription() {
         return description;
+    }
+
+    public String getLocalizedDescription(Locale locale) {
+        String key = "kit." + name.toLowerCase().replace(" ", "_") + ".description";
+        return LocaleManager.getMessage(key, locale);
     }
 }

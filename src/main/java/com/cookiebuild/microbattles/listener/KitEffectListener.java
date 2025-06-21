@@ -213,7 +213,7 @@ public class KitEffectListener implements Listener {
             if (entity instanceof Player target && !entity.equals(player)) {
                 target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 120, 2)); // Slowness III
                 target.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, 120, 1));
-                target.sendMessage(ChatColor.AQUA + "Vous êtes gelé par la magie de glace !");
+                target.sendMessage(ChatColor.AQUA + LocaleManager.getMessage("kit.frost_mage.frozen", target.locale()));
                 target.getWorld().spawnParticle(Particle.SNOWFLAKE, target.getLocation().add(0, 1, 0), 15);
             }
         }
@@ -221,7 +221,7 @@ public class KitEffectListener implements Listener {
         // Effets sonores et visuels améliorés
         player.getWorld().playSound(player.getLocation(), Sound.BLOCK_GLASS_BREAK, 1.0f, 1.0f);
         player.getWorld().playSound(player.getLocation(), Sound.ENTITY_PLAYER_SPLASH_HIGH_SPEED, 1.0f, 0.5f);
-        player.sendMessage(ChatColor.AQUA + "Pont de glace créé !");
+        player.sendMessage(ChatColor.AQUA + LocaleManager.getMessage("kit.frost_mage.ice_bridge", player.locale()));
     }
 
     private void brewRandomPotion(Player player) {
@@ -235,12 +235,14 @@ public class KitEffectListener implements Listener {
             case 0: // Potion de combat
                 player.addPotionEffect(new PotionEffect(PotionEffectType.STRENGTH, 300, 1));
                 player.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, 300, 0));
-                player.sendMessage(ChatColor.RED + "Potion de Combat brassée ! Force et Résistance !");
+                player.sendMessage(
+                        ChatColor.RED + LocaleManager.getMessage("kit.alchemist.potion_combat", player.locale()));
                 break;
             case 1: // Potion de mobilité
                 player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 400, 2));
                 player.addPotionEffect(new PotionEffect(PotionEffectType.JUMP_BOOST, 400, 1));
-                player.sendMessage(ChatColor.GREEN + "Potion de Mobilité brassée ! Vitesse et Saut !");
+                player.sendMessage(
+                        ChatColor.GREEN + LocaleManager.getMessage("kit.alchemist.potion_mobility", player.locale()));
                 break;
             case 2: // Potion de guérison
                 player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 200, 2));
@@ -251,7 +253,8 @@ public class KitEffectListener implements Listener {
             case 3: // Potion tactique
                 player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 100, 0));
                 player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, 600, 0));
-                player.sendMessage(ChatColor.GRAY + "Potion Tactique brassée ! Invisibilité et Vision Nocturne !");
+                player.sendMessage(
+                        ChatColor.GRAY + LocaleManager.getMessage("kit.alchemist.potion_tactical", player.locale()));
                 break;
         }
 
@@ -276,7 +279,8 @@ public class KitEffectListener implements Listener {
         // Marquer pour le bonus d'assassin
         if (kit.getName().equals("Assassin")) {
             assassinInvisibilityBonus.put(player.getUniqueId(), true);
-            player.sendMessage(ChatColor.DARK_PURPLE + "Prêt pour une attaque sournoise !");
+            player.sendMessage(
+                    ChatColor.DARK_PURPLE + LocaleManager.getMessage("kit.assassin.stealth_ready", player.locale()));
 
             // Retirer le bonus après l'effet
             Bukkit.getScheduler().runTaskLater(player.getServer().getPluginManager().getPlugin("MicroBattles"), () -> {
@@ -287,7 +291,7 @@ public class KitEffectListener implements Listener {
         // Effets visuels et sonores
         player.getWorld().spawnParticle(Particle.SMOKE, player.getLocation().add(0, 1, 0), 20);
         player.playSound(player.getLocation(), Sound.ENTITY_ILLUSIONER_MIRROR_MOVE, 1.0f, 1.0f);
-        player.sendMessage(ChatColor.GRAY + "Mode furtif activé !");
+        player.sendMessage(ChatColor.GRAY + LocaleManager.getMessage("kit.ninja.stealth", player.locale()));
     }
 
     private boolean checkCooldown(Player player, String ability, int cooldownSeconds) {
@@ -352,7 +356,8 @@ public class KitEffectListener implements Listener {
                             target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 100, 2));
                             target.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, 100, 1));
                             target.damage(2.0, shooter);
-                            target.sendMessage(ChatColor.AQUA + "Vous êtes gelé !");
+                            target.sendMessage(ChatColor.AQUA
+                                    + LocaleManager.getMessage("kit.frost_mage.frozen_snowball", target.locale()));
                         }
                     }
 
