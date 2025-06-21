@@ -60,7 +60,7 @@ public class KitManager {
 
     private void createExplosiveArcherKit() {
         Kit explosiveArcherKit = new Kit("Explosive Archer", 120, 7, false,
-                "Launch TNT-tipped arrows! Careful with self-damage. (Arrows create small explosions - requires custom code)");
+                "Flèches explosives ! Chaque flèche crée une explosion de 2.5 blocs infligeant 6 cœurs de dégâts et projetant les ennemis.");
         explosiveArcherKit.addItem(Material.BOW, 1, Enchantment.INFINITY, 1);
         explosiveArcherKit.addItem(Material.ARROW, 1);
         explosiveArcherKit.addItem(Material.TNT, 8);
@@ -98,7 +98,7 @@ public class KitManager {
 
     private void createTankKit() {
         Kit tankKit = new Kit("Tank", 230, 15, false,
-                "Absorb damage and protect your team. Very slow but sturdy. (Permanent Slowness I & Resistance I)");
+                "Absorbez les dégâts et protégez votre équipe. Très lent mais résistant. (Slowness I & Resistance I permanents)");
         tankKit.addItem(Material.DIAMOND_SWORD, 1);
         tankKit.addItem(Material.SHIELD, 1);
         tankKit.addItem(Material.GOLDEN_APPLE, 3);
@@ -111,7 +111,7 @@ public class KitManager {
 
     private void createNinjaKit() {
         Kit ninjaKit = new Kit("Ninja", 300, 22, false,
-                "Move swiftly and strike from the shadows. (Speed II & Invisibility potions)");
+                "Furtivité avancée ! Double-sneak pour invisibilité (6s) + Speed II + Night Vision. Cooldown: 25s.");
         ninjaKit.addItem(Material.IRON_SWORD, 1, Enchantment.SHARPNESS, 1);
         ninjaKit.addItem(Material.ENDER_PEARL, 5);
         ninjaKit.addItemStack(PotionUtil.createPotion(PotionEffectType.SPEED, 1800, 1), 1);
@@ -135,7 +135,7 @@ public class KitManager {
 
     private void createBerserkerKit() {
         Kit berserkerKit = new Kit("Berserker", 150, 8, false,
-                "High damage, low defense. (Gains Strength I when below 5 hearts - requires custom code)");
+                "Rage conditionnelle ! Gagne Strength I + Speed I à 50% de vie, Strength II à 25% de vie. Plus c'est dangereux, plus c'est puissant !");
         berserkerKit.addItem(Material.DIAMOND_AXE, 1, Enchantment.SHARPNESS, 2);
         berserkerKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS,
                 Material.LEATHER_BOOTS);
@@ -144,7 +144,7 @@ public class KitManager {
 
     private void createChemistKit() {
         Kit chemistKit = new Kit("Chemist", 280, 20, false,
-                "Use harmful splash potions to weaken your foes from a distance.");
+                "Utilisez des potions splash nocives pour affaiblir vos ennemis à distance. Poison, dégâts instantanés et ralentissement !");
         chemistKit.addItemStack(PotionUtil.createSplashPotion(PotionEffectType.INSTANT_DAMAGE, 0, 0), 3);
         chemistKit.addItemStack(PotionUtil.createSplashPotion(PotionEffectType.POISON, 300, 0), 2);
         chemistKit.addItemStack(PotionUtil.createSplashPotion(PotionEffectType.SLOWNESS, 300, 1), 2);
@@ -156,7 +156,7 @@ public class KitManager {
 
     private void createAssassinKit() {
         Kit assassinKit = new Kit("Assassin", 350, 28, false,
-                "Deal massive damage with a critical first strike from invisibility. (First hit after invis deals 2x damage - requires custom code)");
+                "Attaque sournoise ! Double-sneak pour invisibilité (6s). Premier coup après invisibilité = 200% de dégâts ! Cooldown: 20s.");
         ItemStack dagger = new ItemStack(Material.GOLDEN_SWORD);
         dagger.addUnsafeEnchantment(Enchantment.SHARPNESS, 3);
         ItemMeta daggerMeta = dagger.getItemMeta();
@@ -188,7 +188,7 @@ public class KitManager {
 
     private void createVampireKit() {
         Kit vampireKit = new Kit("Vampire", 220, 14, false,
-                "Heal by damaging enemies. (Lifesteal: 25% of damage dealt - requires custom code)");
+                "Lifesteal puissant ! Récupère 50% des dégâts infligés en vie (max 2 cœurs). 25% de chance d'infliger Weakness aux victimes.");
         ItemStack vampireSword = new ItemStack(Material.IRON_SWORD);
         ItemMeta vampireMeta = vampireSword.getItemMeta();
         if (vampireMeta != null) {
@@ -203,7 +203,7 @@ public class KitManager {
 
     private void createFrostMageKit() {
         Kit frostMageKit = new Kit("Frost Mage", 320, 25, false,
-                "Control the battlefield with ice and snow. (Wand shoots slowing snowballs - requires custom code)");
+                "Maîtrise de la glace ! Passif: Speed II sur glace. Actif: Pont de glace (20 blocs) + zone de gel (Slowness III). Cooldown: 8s.");
         ItemStack iceWand = new ItemStack(Material.STICK);
         iceWand.addUnsafeEnchantment(Enchantment.KNOCKBACK, 1);
         ItemMeta wandMeta = iceWand.getItemMeta();
@@ -225,7 +225,7 @@ public class KitManager {
 
     private void createJuggernautKit() {
         Kit juggernautKit = new Kit("Juggernaut", 400, 30, false,
-                "An unstoppable force. Extremely tanky and strong, but very slow. (Permanent Slowness II & Resistance II)");
+                "Force imparable ! Extrêmement résistant et fort, mais très lent. (Slowness II & Resistance II permanents)");
         juggernautKit.addItem(Material.NETHERITE_AXE, 1, Enchantment.SHARPNESS, 1);
         juggernautKit.addItem(Material.SHIELD, 1);
         juggernautKit.addItem(Material.ENCHANTED_GOLDEN_APPLE, 1);
@@ -253,7 +253,7 @@ public class KitManager {
 
     private void createAlchemistKit() {
         Kit alchemistKit = new Kit("Alchemist", 200, 12, false,
-                "Brew powerful potions during the match to gain an advantage.");
+                "Brassage intelligent ! 4 potions aléatoires: Combat (Strength II + Resistance), Mobilité (Speed III + Jump), Guérison (Regen III + Absorption), Tactique (Invisibilité + Night Vision). Cooldown: 12s.");
         alchemistKit.addItem(Material.IRON_SWORD, 1);
         alchemistKit.addItem(Material.BREWING_STAND, 1);
         alchemistKit.addItem(Material.NETHER_WART, 5);
