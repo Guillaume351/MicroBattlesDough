@@ -40,6 +40,7 @@ public class KitManager {
         createJuggernautKit();
         createTrapperKit();
         createAlchemistKit();
+        createMobilityKit();
     }
 
     public static KitManager getInstance() {
@@ -252,6 +253,16 @@ public class KitManager {
         alchemistKit.setArmor(Material.GOLDEN_HELMET, Material.GOLDEN_CHESTPLATE, Material.GOLDEN_LEGGINGS,
                 Material.GOLDEN_BOOTS);
         kits.add(alchemistKit);
+    }
+
+    private void createMobilityKit() {
+        Kit mobilityKit = new Kit("Mobility", 90, 4, false, "kit.mobility.description");
+        mobilityKit.addItem(Material.IRON_SWORD, 1);
+        mobilityKit.addItem(Material.FEATHER, 3);
+        mobilityKit.addItem(Material.SUGAR, 2);
+        mobilityKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS,
+                Material.LEATHER_BOOTS);
+        kits.add(mobilityKit);
     }
 
     public Kit getKit(String name) {

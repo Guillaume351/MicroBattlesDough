@@ -179,23 +179,46 @@ public class MicroBattlesGame extends Game {
     }
 
     private void equipSelectedKits() {
+        com.cookiebuild.microbattles.kits.TieredKitManager tieredKitManager = com.cookiebuild.microbattles.kits.TieredKitManager
+                .getInstance(KitManager.getInstance());
+
         for (CookiePlayer player : getPlayers()) {
-            Kit selectedKit = getSelectedKit(player);
-            if (selectedKit == null) {
-                // Si le joueur n'a pas sélectionné de kit, donner le kit par défaut
-                selectedKit = KitManager.getInstance().getKit("Default");
+            // Try to equip the selected tiered kit first
+            boolean equipped = tieredKitManager.equipSelectedKit(player.getPlayer(),
+                    CookieDough.createMinigameStatsService());
+
+            String kitName = "Default";
+            Kit selectedKit = null;
+
+            if (equipped) {
+                // Get the selected kit name for display
+                String selection = tieredKitManager.getSelectedKit(player.getPlayer().getUniqueId());
+                if (selection != null && selection.contains(":")) {
+                    String[] parts = selection.split(":");
+                    kitName = parts[0] + " " + getRomanNumeral(Integer.parseInt(parts[1]));
+                }
+            } else {
+                // Fallback to old system if no tiered kit selected
+                selectedKit = getSelectedKit(player);
                 if (selectedKit == null) {
-                    selectedKit = KitManager.getInstance().getRandomKit();
+                    // Si le joueur n'a pas sélectionné de kit, donner le kit par défaut
+                    selectedKit = KitManager.getInstance().getKit("Default");
+                    if (selectedKit == null) {
+                        selectedKit = KitManager.getInstance().getRandomKit();
+                    }
+                }
+
+                // Équiper le kit
+                if (selectedKit != null) {
+                    selectedKit.equipPlayer(player.getPlayer());
+                    equippedKits.put(player.getPlayer().getUniqueId().toString(), selectedKit);
+                    kitName = selectedKit.getName();
                 }
             }
 
-            // Équiper le kit
-            selectedKit.equipPlayer(player.getPlayer());
-            equippedKits.put(player.getPlayer().getUniqueId().toString(), selectedKit);
-
             // Modifier le nom d'affichage pour inclure le kit
             String originalName = player.getPlayer().getName();
-            String kitDisplayName = "§f" + originalName + "\n§7[" + selectedKit.getName() + "]";
+            String kitDisplayName = "§f" + originalName + "\n§7[" + kitName + "]";
             player.getPlayer().setDisplayName(kitDisplayName);
             player.getPlayer().setPlayerListName(kitDisplayName);
 
@@ -239,7 +262,7 @@ public class MicroBattlesGame extends Game {
             player.getPlayer().setGameMode(GameMode.SURVIVAL);
 
             // Donner le cookie de sélection de kit au lieu d'un kit aléatoire
-            KitManager.giveKitSelectorCookie(player.getPlayer());
+            com.cookiebuild.microbattles.listener.TieredKitSelectorListener.giveKitSelectorCookie(player.getPlayer());
 
             // Informer le joueur sur le cookie
             player.getPlayer().showTitle(
@@ -729,5 +752,18 @@ public class MicroBattlesGame extends Game {
     public void respawnPlayerToTeamSpawn(CookiePlayer player) {
         Location spawnLocation = map.getTeamSpawn(getTeamNumber(player));
         player.getPlayer().teleport(spawnLocation);
+    }
+
+    private String getRomanNumeral(int number) {
+        switch (number) {
+            case 1:
+                return "I";
+            case 2:
+                return "II";
+            case 3:
+                return "III";
+            default:
+                return String.valueOf(number);
+        }
     }
 }
