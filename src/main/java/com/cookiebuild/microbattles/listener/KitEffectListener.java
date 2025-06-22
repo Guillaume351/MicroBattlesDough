@@ -35,6 +35,7 @@ import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
 import com.cookiebuild.microbattles.kits.Kit;
+import com.cookiebuild.microbattles.kits.KitManager;
 
 public class KitEffectListener implements Listener {
 
@@ -313,10 +314,21 @@ public class KitEffectListener implements Listener {
     private Kit getPlayerKit(Player player) {
         CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
         Game game = GameManager.getGameOfPlayer(cookiePlayer);
-        if (!(game instanceof MicroBattlesGame microBattlesGame) || !game.hasStarted()) {
+        if (!(game instanceof MicroBattlesGame) || !game.hasStarted()) {
             return null;
         }
-        return microBattlesGame.getKit(cookiePlayer);
+
+        KitManager kitManager = KitManager.getInstance();
+        String selectedKitStr = kitManager.getSelectedKit(player.getUniqueId());
+
+        if (selectedKitStr == null || selectedKitStr.isEmpty()) {
+            return kitManager.getOriginalKit("Default");
+        }
+
+        String[] parts = selectedKitStr.split(":");
+        String kitName = parts[0];
+
+        return kitManager.getOriginalKit(kitName);
     }
 
     @EventHandler
@@ -326,7 +338,7 @@ public class KitEffectListener implements Listener {
             Game game = GameManager.getGameOfPlayer(cookiePlayer);
 
             if (game instanceof MicroBattlesGame microBattlesGame && game.hasStarted()) {
-                Kit playerKit = microBattlesGame.getKit(cookiePlayer);
+                Kit playerKit = getPlayerKit(shooter);
                 if (playerKit == null)
                     return;
 
@@ -376,7 +388,7 @@ public class KitEffectListener implements Listener {
             Game game = GameManager.getGameOfPlayer(cookiePlayer);
 
             if (game instanceof MicroBattlesGame microBattlesGame && game.hasStarted()) {
-                Kit playerKit = microBattlesGame.getKit(cookiePlayer);
+                Kit playerKit = getPlayerKit(shooter);
                 if (playerKit == null)
                     return;
 

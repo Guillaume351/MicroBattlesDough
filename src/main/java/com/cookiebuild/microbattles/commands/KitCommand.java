@@ -4,19 +4,16 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.geysermc.geyser.api.GeyserApi;
 
-import com.cookiebuild.cookiedough.service.PlayerMinigameProgressionService;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
-import com.cookiebuild.microbattles.kits.KitManager;
-import com.cookiebuild.microbattles.ui.ImprovedKitSelectionUI;
+import com.cookiebuild.microbattles.listener.KitSelectorListener;
 
 public class KitCommand implements CommandExecutor {
 
-    private final ImprovedKitSelectionUI kitSelectionUI;
+    private final KitSelectorListener kitSelectorListener;
 
-    public KitCommand(PlayerMinigameProgressionService progressionService) {
-        this.kitSelectionUI = new ImprovedKitSelectionUI(KitManager.getInstance(), progressionService);
+    public KitCommand(KitSelectorListener kitSelectorListener) {
+        this.kitSelectorListener = kitSelectorListener;
     }
 
     @Override
@@ -28,12 +25,10 @@ public class KitCommand implements CommandExecutor {
 
         Player player = (Player) sender;
 
-        // Vérifier si le joueur est un joueur Bedrock ou Java
-        if (GeyserApi.api().isBedrockPlayer(player.getUniqueId())) {
-            kitSelectionUI.openKitSelectionForm(player);
-        } else {
-            kitSelectionUI.openKitSelectionGUI(player);
-        }
+        // The UI class now handles both Java and Bedrock players.
+        // We can add the Bedrock check back later if needed, but for now, this is
+        // cleaner.
+        kitSelectorListener.getKitSelectionUI().openKitSelectionGUI(player);
 
         return true;
     }
