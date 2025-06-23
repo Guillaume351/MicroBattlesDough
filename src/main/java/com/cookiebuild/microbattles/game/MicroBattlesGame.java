@@ -453,12 +453,17 @@ public class MicroBattlesGame extends Game {
 
     @Override
     public void removePlayer(CookiePlayer player) {
-        MicroBattlesTeam team = getPlayerTeam(player);
-        if (team != null) {
+        super.removePlayer(player);
+        for (MicroBattlesTeam team : teams.values()) {
             team.removePlayer(player);
         }
-        super.removePlayer(player);
-        checkForWinner();
+
+        scoreboardManager.removeScoreboard(player.getPlayer());
+        if (getState() == GameState.RUNNING) {
+            checkForWinner();
+        } else {
+            participantPlayerData.remove(player.getPlayer().getUniqueId());
+        }
     }
 
     public boolean arePlayersInSameTeam(CookiePlayer player1, CookiePlayer player2) {
