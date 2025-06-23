@@ -3,6 +3,7 @@ package com.cookiebuild.microbattles.ui;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -15,8 +16,9 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
-import com.cookiebuild.cookiedough.model.MinigameStats;
+import com.cookiebuild.cookiedough.model.PlayerMatchPerformance;
 import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.service.PlayerStatsService;
 import com.cookiebuild.microbattles.kits.Kit;
 import com.cookiebuild.microbattles.kits.KitLevel;
 import com.cookiebuild.microbattles.kits.KitManager;
@@ -25,17 +27,38 @@ import com.cookiebuild.microbattles.kits.TieredKit;
 public class KitSelectionUI implements Listener {
 
     private final KitManager kitManager;
-    private final MinigameStatsService statsService;
+    private final MinigameStatsService minigameStatsService;
+    private final PlayerStatsService playerStatsService;
     private static final String JAVA_GUI_TITLE = ChatColor.DARK_AQUA + "Kit Selection";
 
-    public KitSelectionUI(KitManager kitManager, MinigameStatsService statsService) {
+    public KitSelectionUI(KitManager kitManager, MinigameStatsService minigameStatsService,
+            PlayerStatsService playerStatsService) {
         this.kitManager = kitManager;
-        this.statsService = statsService;
+        this.minigameStatsService = minigameStatsService;
+        this.playerStatsService = playerStatsService;
     }
 
     public void openKitSelectionGUI(Player player) {
         UUID playerId = player.getUniqueId();
-        MinigameStats playerStats = statsService.getOrCreateStats(playerId, MinigameStatsService.MICROBATTLES);
+
+        // Calculate stats from performances
+        List<PlayerMatchPerformance> performances = playerStatsService.getPlayerPerformances(playerId)
+                .stream()
+                .filter(p -> "MicroBattles".equals(p.getMatch().getGameType()))
+                .collect(Collectors.toList());
+
+        int wins = (int) performances.stream()
+                .filter(p -> p.getMatch().getWinners().stream().anyMatch(w -> w.getId().equals(playerId))).count();
+        int losses = performances.size() - wins;
+        int kills = performances.stream().mapToInt(PlayerMatchPerformance::getKillsInMatch).sum();
+        int deaths = performances.stream().mapToInt(PlayerMatchPerformance::getDeathsInMatch).sum();
+
+        // Get progression stats
+        int playerLevel = minigameStatsService.getLevel(playerId, MinigameStatsService.MICROBATTLES);
+        int playerCoins = minigameStatsService.getCoins(playerId, MinigameStatsService.MICROBATTLES);
+        com.cookiebuild.cookiedough.model.MinigameStats progressionStats = minigameStatsService
+                .getOrCreateStats(playerId, MinigameStatsService.MICROBATTLES);
+        int playerXp = progressionStats.getExperience();
 
         List<TieredKit> tieredKits = new ArrayList<>(kitManager.getAllTieredKits());
         Kit defaultKit = kitManager.getOriginalKit("Default");
@@ -50,18 +73,18 @@ public class KitSelectionUI implements Listener {
 
         for (TieredKit tieredKit : tieredKits) {
             for (KitLevel level : tieredKit.getLevels()) {
-                boolean previousLevelUnlocked = level.getLevel() == 1 || kitManager.isKitLevelUnlocked(statsService,
-                        playerId, tieredKit.getBaseName(), level.getLevel() - 1);
+                boolean previousLevelUnlocked = level.getLevel() == 1 || kitManager.isKitLevelUnlocked(
+                        minigameStatsService, playerId, tieredKit.getBaseName(), level.getLevel() - 1);
                 if (!previousLevelUnlocked) {
                     continue;
                 }
 
-                boolean unlocked = kitManager.isKitLevelUnlocked(statsService, playerId, tieredKit.getBaseName(),
-                        level.getLevel());
-                boolean hasLevel = kitManager.hasRequiredPlayerLevelForKit(statsService, playerId,
+                boolean unlocked = kitManager.isKitLevelUnlocked(minigameStatsService, playerId,
                         tieredKit.getBaseName(), level.getLevel());
-                boolean canAfford = kitManager.canAffordKitLevel(statsService, playerId, tieredKit.getBaseName(),
-                        level.getLevel());
+                boolean hasLevel = kitManager.hasRequiredPlayerLevelForKit(minigameStatsService, playerId,
+                        tieredKit.getBaseName(), level.getLevel());
+                boolean canAfford = kitManager.canAffordKitLevel(minigameStatsService, playerId,
+                        tieredKit.getBaseName(), level.getLevel());
 
                 KitDisplayInfo displayInfo = new KitDisplayInfo(tieredKit.getBaseName(), level.getLevel(), unlocked,
                         hasLevel, canAfford, tieredKit, level);
@@ -80,7 +103,7 @@ public class KitSelectionUI implements Listener {
         int inventorySize = Math.max(27, (int) Math.ceil(totalSlots / 9.0) * 9);
         Inventory gui = Bukkit.createInventory(null, inventorySize, JAVA_GUI_TITLE);
 
-        addPlayerInfoItems(gui, playerStats);
+        addPlayerInfoItems(gui, playerLevel, playerCoins, playerXp, wins, losses, kills, deaths);
 
         int currentSlot = 9;
         if (!ownedKits.isEmpty()) {
@@ -110,26 +133,24 @@ public class KitSelectionUI implements Listener {
         player.openInventory(gui);
     }
 
-    private void addPlayerInfoItems(Inventory gui, MinigameStats playerStats) {
+    private void addPlayerInfoItems(Inventory gui, int level, int coins, int xp, int wins, int losses, int kills,
+            int deaths) {
         ItemStack playerInfo = new ItemStack(Material.PLAYER_HEAD);
         ItemMeta meta = playerInfo.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(ChatColor.AQUA + "Your MicroBattles Stats");
             List<String> lore = new ArrayList<>();
-            lore.add(ChatColor.YELLOW + "Level: " + playerStats.getLevel());
-            lore.add(ChatColor.GOLD + "Coins: " + playerStats.getCoins());
-            lore.add(ChatColor.GREEN + "XP: " + playerStats.getExperience());
+            lore.add(ChatColor.YELLOW + "Level: " + level);
+            lore.add(ChatColor.GOLD + "Coins: " + coins);
+            lore.add(ChatColor.GREEN + "XP: " + xp);
             lore.add("");
-            lore.add(ChatColor.BLUE + "Wins: " + playerStats.getWins());
-            lore.add(ChatColor.RED + "Losses: " + playerStats.getLosses());
-            lore.add(ChatColor.GREEN + "Kills: " + playerStats.getKills());
-            lore.add(ChatColor.DARK_RED + "Deaths: " + playerStats.getDeaths());
-            double kdRatio = playerStats.getDeaths() > 0 ? (double) playerStats.getKills() / playerStats.getDeaths()
-                    : playerStats.getKills();
+            lore.add(ChatColor.BLUE + "Wins: " + wins);
+            lore.add(ChatColor.RED + "Losses: " + losses);
+            lore.add(ChatColor.GREEN + "Kills: " + kills);
+            lore.add(ChatColor.DARK_RED + "Deaths: " + deaths);
+            double kdRatio = deaths > 0 ? (double) kills / deaths : kills;
             lore.add(ChatColor.YELLOW + "K/D Ratio: " + String.format("%.2f", kdRatio));
-            double winRate = (playerStats.getWins() + playerStats.getLosses()) > 0
-                    ? (double) playerStats.getWins() / (playerStats.getWins() + playerStats.getLosses()) * 100
-                    : 0;
+            double winRate = (wins + losses) > 0 ? (double) wins / (wins + losses) * 100 : 0;
             lore.add(ChatColor.AQUA + "Win Rate: " + String.format("%.1f%%", winRate));
             meta.setLore(lore);
             playerInfo.setItemMeta(meta);
@@ -295,14 +316,14 @@ public class KitSelectionUI implements Listener {
             return;
         }
 
-        if (kitManager.isKitLevelUnlocked(statsService, playerId, kitName, level)) {
+        if (kitManager.isKitLevelUnlocked(minigameStatsService, playerId, kitName, level)) {
             kitManager.selectKit(playerId, kitName, level);
             player.sendMessage(ChatColor.GREEN + "You selected " + displayName);
             player.closeInventory();
         } else {
-            if (kitManager.hasRequiredPlayerLevelForKit(statsService, playerId, kitName, level)
-                    && kitManager.canAffordKitLevel(statsService, playerId, kitName, level)) {
-                boolean purchaseSuccess = kitManager.purchaseKitLevel(statsService, playerId, kitName, level);
+            if (kitManager.hasRequiredPlayerLevelForKit(minigameStatsService, playerId, kitName, level)
+                    && kitManager.canAffordKitLevel(minigameStatsService, playerId, kitName, level)) {
+                boolean purchaseSuccess = kitManager.purchaseKitLevel(minigameStatsService, playerId, kitName, level);
                 if (purchaseSuccess) {
                     player.sendMessage(ChatColor.GREEN + "Successfully purchased and selected " + displayName);
                     player.closeInventory();
@@ -310,7 +331,7 @@ public class KitSelectionUI implements Listener {
                 } else {
                     player.sendMessage(ChatColor.RED + "An error occurred during purchase.");
                 }
-            } else if (!kitManager.hasRequiredPlayerLevelForKit(statsService, playerId, kitName, level)) {
+            } else if (!kitManager.hasRequiredPlayerLevelForKit(minigameStatsService, playerId, kitName, level)) {
                 KitLevel kitLevel = kitManager.getTieredKit(kitName).getLevel(level);
                 player.sendMessage(
                         ChatColor.RED + "You need to be level " + kitLevel.getRequiredLevel() + " to purchase this.");
@@ -332,7 +353,4 @@ public class KitSelectionUI implements Listener {
                 return 0;
         }
     }
-
-    // Bedrock support can be re-added later if needed, focusing on Java first for
-    // cleanup.
 }

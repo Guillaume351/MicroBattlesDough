@@ -31,7 +31,7 @@ import com.cookiebuild.cookiedough.model.PlayerData;
 import com.cookiebuild.cookiedough.model.PlayerMatchPerformance;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
 import com.cookiebuild.cookiedough.service.MatchService;
-import com.cookiebuild.cookiedough.service.PlayerMinigameProgressionService;
+import com.cookiebuild.cookiedough.service.MinigameStatsService;
 import com.cookiebuild.cookiedough.ui.CustomScoreboardManager;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.MicroBattles;
@@ -407,17 +407,28 @@ public class MicroBattlesGame extends Game {
                     perf.setGameSpecificMetrics(metrics.toString());
                 }
                 matchService.endMatch(this.currentMatchInstance, winnerPlayerDataList);
-                PlayerMinigameProgressionService progressionService = new PlayerMinigameProgressionService(
-                        gameEntityManager);
+                MinigameStatsService minigameStatsService = CookieDough.createMinigameStatsService();
                 for (Map.Entry<UUID, PlayerData> entry : participantPlayerData.entrySet()) {
                     UUID playerId = entry.getKey();
                     boolean isWinner = winnerPlayerDataList.stream().anyMatch(pd -> pd.getId().equals(playerId));
                     int kills = getKillsThisMatch(playerId);
                     int deaths = getDeathsThisMatch(playerId);
                     int assists = playerAssistsThisMatch.getOrDefault(playerId, 0);
-                    int teamsEliminated = playerTeamsEliminatedThisMatch.getOrDefault(playerId, 0);
-                    progressionService.rewardPlayer(playerId, "MicroBattles", isWinner, kills, deaths, assists,
-                            teamsEliminated);
+
+                    com.cookiebuild.cookiedough.model.MinigameStats stats = minigameStatsService
+                            .getOrCreateStats(playerId, MinigameStatsService.MICROBATTLES);
+
+                    int xpGained = isWinner ? 100 : 25;
+                    xpGained += kills * 10;
+                    xpGained += assists * 5;
+
+                    int coinsGained = isWinner ? 50 : 10;
+                    coinsGained += kills * 5;
+                    coinsGained += assists * 2;
+
+                    stats.addExperience(xpGained);
+                    stats.addCoins(coinsGained);
+                    minigameStatsService.saveStats(stats);
                 }
             } catch (Exception e) {
                 MicroBattles.getInstance().getLogger().severe("Error during match finalization: " + e.getMessage());

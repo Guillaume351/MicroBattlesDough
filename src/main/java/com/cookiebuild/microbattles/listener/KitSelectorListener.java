@@ -23,8 +23,9 @@ public class KitSelectorListener implements Listener {
     private static final String KIT_SELECTOR_NAME = "§6Kit Selector";
     private final KitSelectionUI kitSelectionUI;
 
-    public KitSelectorListener(KitManager kitManager, MinigameStatsService statsService) {
-        this.kitSelectionUI = new KitSelectionUI(kitManager, statsService);
+    public KitSelectorListener(KitManager kitManager, MinigameStatsService minigameStatsService,
+            com.cookiebuild.cookiedough.service.PlayerStatsService playerStatsService) {
+        this.kitSelectionUI = new KitSelectionUI(kitManager, minigameStatsService, playerStatsService);
     }
 
     @EventHandler
