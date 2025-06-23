@@ -19,6 +19,7 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.utils.LocaleManager;
 
 public class KitManager {
 
@@ -129,6 +130,14 @@ public class KitManager {
 
     public String getSelectedKit(UUID playerId) {
         return playerSelectedKits.get(playerId);
+    }
+
+    public String getKitDescription(String kitName, Player player) {
+        Kit kit = getOriginalKit(kitName);
+        if (kit == null) {
+            return "Unknown kit.";
+        }
+        return LocaleManager.getMessage(kit.getDescription(), player.locale());
     }
 
     public boolean isKitLevelUnlocked(MinigameStatsService statsService, UUID playerId, String kitName, int level) {

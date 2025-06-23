@@ -68,7 +68,7 @@ public class KitSelectionUI implements Listener {
         List<KitDisplayInfo> lockedKits = new ArrayList<>();
 
         if (defaultKit != null) {
-            ownedKits.add(new KitDisplayInfo(defaultKit.getName(), 0, true, true, true, defaultKit));
+            ownedKits.add(new KitDisplayInfo(defaultKit.getName(), 0, true, true, true, defaultKit, player));
         }
 
         for (TieredKit tieredKit : tieredKits) {
@@ -87,7 +87,7 @@ public class KitSelectionUI implements Listener {
                         tieredKit.getBaseName(), level.getLevel());
 
                 KitDisplayInfo displayInfo = new KitDisplayInfo(tieredKit.getBaseName(), level.getLevel(), unlocked,
-                        hasLevel, canAfford, tieredKit, level);
+                        hasLevel, canAfford, tieredKit, level, player);
 
                 if (unlocked) {
                     ownedKits.add(displayInfo);
@@ -110,7 +110,7 @@ public class KitSelectionUI implements Listener {
             addSectionHeader(gui, currentSlot, ChatColor.GREEN + "✓ Owned Kits", Material.EMERALD);
             currentSlot++;
             for (KitDisplayInfo kitInfo : ownedKits) {
-                addKitItem(gui, currentSlot++, kitInfo);
+                addKitItem(gui, currentSlot++, kitInfo, player);
             }
             currentSlot++;
         }
@@ -118,7 +118,7 @@ public class KitSelectionUI implements Listener {
             addSectionHeader(gui, currentSlot, ChatColor.YELLOW + "$ Available for Purchase", Material.GOLD_INGOT);
             currentSlot++;
             for (KitDisplayInfo kitInfo : availableKits) {
-                addKitItem(gui, currentSlot++, kitInfo);
+                addKitItem(gui, currentSlot++, kitInfo, player);
             }
             currentSlot++;
         }
@@ -126,7 +126,7 @@ public class KitSelectionUI implements Listener {
             addSectionHeader(gui, currentSlot, ChatColor.RED + "✗ Locked Kits", Material.BARRIER);
             currentSlot++;
             for (KitDisplayInfo kitInfo : lockedKits) {
-                addKitItem(gui, currentSlot++, kitInfo);
+                addKitItem(gui, currentSlot++, kitInfo, player);
             }
         }
 
@@ -211,14 +211,11 @@ public class KitSelectionUI implements Listener {
         gui.setItem(slot, header);
     }
 
-    private void addKitItem(Inventory gui, int slot, KitDisplayInfo kitInfo) {
+    private void addKitItem(Inventory gui, int slot, KitDisplayInfo kitInfo, Player player) {
         if (slot >= gui.getSize())
             return;
 
         Material iconMaterial = getKitMaterial(kitInfo.kitName);
-        if (!kitInfo.unlocked) {
-            iconMaterial = Material.BARRIER;
-        }
 
         ItemStack kitItem = new ItemStack(iconMaterial);
         ItemMeta meta = kitItem.getItemMeta();
@@ -235,7 +232,9 @@ public class KitSelectionUI implements Listener {
             } else if (kitInfo.unlocked) {
                 lore.add(ChatColor.GREEN + "✓ Owned");
             } else {
-                lore.add(ChatColor.RED + "✗ Locked");
+                if (!kitInfo.hasLevel || !kitInfo.canAfford) {
+                    lore.add(ChatColor.RED + "✗ Locked");
+                }
                 if (kitInfo.kitLevel != null) {
                     lore.add(ChatColor.GOLD + "Price: " + kitInfo.kitLevel.getPrice() + " coins");
                     if (kitInfo.kitLevel.getRequiredLevel() > 0) {
@@ -245,7 +244,7 @@ public class KitSelectionUI implements Listener {
             }
             lore.add("");
 
-            String description = kitManager.getOriginalKit(kitInfo.kitName).getDescription();
+            String description = kitManager.getKitDescription(kitInfo.kitName, player);
             if (description != null && !description.isEmpty()) {
                 lore.add(ChatColor.DARK_GRAY + "--------------------");
                 lore.add(ChatColor.GRAY + description);
@@ -301,12 +300,12 @@ public class KitSelectionUI implements Listener {
             String lastPart = parts[parts.length - 1];
             level = parseRomanNumeral(lastPart);
             if (level > 0) {
-                kitName = displayName.substring(0, displayName.lastIndexOf(" "));
+                kitName = displayName.substring(0, displayName.lastIndexOf(" ")).trim();
             } else {
-                kitName = displayName;
+                kitName = displayName.trim();
             }
         } else {
-            kitName = displayName;
+            kitName = displayName.trim();
         }
 
         if (kitName.equals("Default")) {
@@ -321,8 +320,10 @@ public class KitSelectionUI implements Listener {
             player.sendMessage(ChatColor.GREEN + "You selected " + displayName);
             player.closeInventory();
         } else {
-            if (kitManager.hasRequiredPlayerLevelForKit(minigameStatsService, playerId, kitName, level)
-                    && kitManager.canAffordKitLevel(minigameStatsService, playerId, kitName, level)) {
+            boolean hasLevel = kitManager.hasRequiredPlayerLevelForKit(minigameStatsService, playerId, kitName, level);
+            boolean canAfford = kitManager.canAffordKitLevel(minigameStatsService, playerId, kitName, level);
+
+            if (hasLevel && canAfford) {
                 boolean purchaseSuccess = kitManager.purchaseKitLevel(minigameStatsService, playerId, kitName, level);
                 if (purchaseSuccess) {
                     player.sendMessage(ChatColor.GREEN + "Successfully purchased and selected " + displayName);
