@@ -23,12 +23,15 @@ import com.cookiebuild.microbattles.kits.Kit;
 import com.cookiebuild.microbattles.kits.KitLevel;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.kits.TieredKit;
+import com.cookiebuild.microbattles.ui.bedrock.BedrockKitSelectionUI;
+import com.cookiebuild.microbattles.ui.bedrock.BedrockUIHelper;
 
 public class KitSelectionUI implements Listener {
 
     private final KitManager kitManager;
     private final MinigameStatsService minigameStatsService;
     private final PlayerStatsService playerStatsService;
+    private final BedrockKitSelectionUI bedrockKitSelectionUI;
     private static final String JAVA_GUI_TITLE = ChatColor.DARK_AQUA + "Kit Selection";
 
     public KitSelectionUI(KitManager kitManager, MinigameStatsService minigameStatsService,
@@ -36,9 +39,15 @@ public class KitSelectionUI implements Listener {
         this.kitManager = kitManager;
         this.minigameStatsService = minigameStatsService;
         this.playerStatsService = playerStatsService;
+        this.bedrockKitSelectionUI = new BedrockKitSelectionUI(kitManager, minigameStatsService);
     }
 
     public void openKitSelectionGUI(Player player) {
+        if (BedrockUIHelper.isBedrockPlayer(player)) {
+            bedrockKitSelectionUI.open(player);
+            return;
+        }
+
         UUID playerId = player.getUniqueId();
 
         // Calculate stats from performances

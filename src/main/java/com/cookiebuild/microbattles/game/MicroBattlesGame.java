@@ -33,6 +33,7 @@ import com.cookiebuild.cookiedough.player.CookiePlayer;
 import com.cookiebuild.cookiedough.service.MatchService;
 import com.cookiebuild.cookiedough.service.MinigameStatsService;
 import com.cookiebuild.cookiedough.ui.CustomScoreboardManager;
+import com.cookiebuild.cookiedough.utils.HibernateUtil;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.kits.KitManager;
@@ -74,7 +75,7 @@ public class MicroBattlesGame extends Game {
         setupTeams();
 
         this.scoreboardManager = new CustomScoreboardManager();
-        this.gameEntityManager = CookieDough.sessionFactory.createEntityManager();
+        this.gameEntityManager = HibernateUtil.createEntityManager();
         this.matchService = new MatchService(this.gameEntityManager);
 
         Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
