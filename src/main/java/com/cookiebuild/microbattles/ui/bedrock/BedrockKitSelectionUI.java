@@ -38,7 +38,8 @@ public class BedrockKitSelectionUI {
         int playerCoins = minigameStatsService.getCoins(playerId, MinigameStatsService.MICROBATTLES);
         int playerXp = minigameStatsService.getOrCreateStats(playerId, MinigameStatsService.MICROBATTLES)
                 .getExperience();
-        String statsContent = String.format("§eLevel: §f%d\n§6Coins: §f%d\n§aXP: §f%d", playerLevel, playerCoins,
+        String statsContent = String.format("§9§lLevel: §f§l%d\n§6§lCoins: §f§l%d\n§a§lXP: §f§l%d", playerLevel,
+                playerCoins,
                 playerXp);
 
         // --- Get and Filter Kits ---
@@ -46,17 +47,17 @@ public class BedrockKitSelectionUI {
         List<KitDisplayInfo> ownedKits = allKits.stream().filter(k -> k.unlocked).collect(Collectors.toList());
 
         SimpleForm.Builder formBuilder = SimpleForm.builder()
-                .title("Kit Selection")
+                .title("§l§9Kit Selection")
                 .content(statsContent);
 
         // Add owned kits to main menu
         if (!ownedKits.isEmpty()) {
-            formBuilder.button("§a--- Your Kits ---");
+            formBuilder.button("§a§l--- Your Kits ---");
             ownedKits.forEach(kit -> formBuilder.button(createOwnedKitButtonText(kit)));
         }
 
         // Add shop button
-        formBuilder.button("§e🏪 Kit Shop");
+        formBuilder.button("§e§l🏪 Kit Shop");
 
         // Create buttons list for handling clicks
         List<KitDisplayInfo> buttonMapping = new ArrayList<>();
@@ -90,7 +91,7 @@ public class BedrockKitSelectionUI {
         UUID playerId = player.getUniqueId();
         int playerLevel = minigameStatsService.getLevel(playerId, MinigameStatsService.MICROBATTLES);
         int playerCoins = minigameStatsService.getCoins(playerId, MinigameStatsService.MICROBATTLES);
-        String statsContent = String.format("§eLevel: §f%d  §6Coins: §f%d", playerLevel, playerCoins);
+        String statsContent = String.format("§9§lLevel: §f§l%d  §6§lCoins: §f§l%d", playerLevel, playerCoins);
 
         // --- Get, Filter, and Sort Kits ---
         List<KitDisplayInfo> allKits = getKitDisplayInfos(player);
@@ -100,15 +101,19 @@ public class BedrockKitSelectionUI {
                 .collect(Collectors.toList());
 
         SimpleForm.Builder formBuilder = SimpleForm.builder()
-                .title("Kit Shop")
+                .title("§l§6Kit Shop")
                 .content(statsContent);
 
         // Create buttons list for handling clicks
         List<KitDisplayInfo> buttonMapping = new ArrayList<>();
 
+        // Add back button at the top for easy access
+        formBuilder.button("§f§l⬅ §9§lBack to Kit Selection");
+        buttonMapping.add(null); // Back button
+
         // Add available kits
         if (!availableKits.isEmpty()) {
-            formBuilder.button("§e--- Available for Purchase ---");
+            formBuilder.button("§e§l--- Available for Purchase ---");
             buttonMapping.add(null); // Separator
             availableKits.forEach(kit -> {
                 formBuilder.button(createShopKitButtonText(kit));
@@ -118,7 +123,7 @@ public class BedrockKitSelectionUI {
 
         // Add locked kits
         if (!lockedKits.isEmpty()) {
-            formBuilder.button("§c--- Locked Kits ---");
+            formBuilder.button("§c§l--- Locked Kits ---");
             buttonMapping.add(null); // Separator
             lockedKits.forEach(kit -> {
                 formBuilder.button(createShopKitButtonText(kit));
@@ -126,15 +131,11 @@ public class BedrockKitSelectionUI {
             });
         }
 
-        // Add back button
-        formBuilder.button("§7← Back to Kit Selection");
-        buttonMapping.add(null); // Back button
-
         formBuilder.validResultHandler(response -> {
             int buttonId = response.getClickedButtonId();
 
-            if (buttonId == buttonMapping.size() - 1) {
-                // Back button clicked
+            if (buttonId == 0) {
+                // Back button clicked (now at top)
                 open(player);
             } else {
                 KitDisplayInfo selectedKit = buttonMapping.get(buttonId);
@@ -152,25 +153,25 @@ public class BedrockKitSelectionUI {
 
     private String createOwnedKitButtonText(KitDisplayInfo kit) {
         String displayName = kit.level == 0 ? kit.kitName : kit.kitLevel.getDisplayName(kit.kitName);
-        return "§a✓ " + displayName;
+        return "§a§l✓ §r§f§l" + displayName;
     }
 
     private String createShopKitButtonText(KitDisplayInfo kit) {
         String displayName = kit.level == 0 ? kit.kitName : kit.kitLevel.getDisplayName(kit.kitName);
         if (kit.hasLevel && kit.canAfford) {
-            return String.format("§e%s\n§fPrice: §6%d coins", displayName, kit.kitLevel.getPrice());
+            return String.format("§e§l%s\n§f§lPrice: §6§l%d coins", displayName, kit.kitLevel.getPrice());
         } else {
             String requirement = !kit.hasLevel ? "Requires Level " + kit.kitLevel.getRequiredLevel()
                     : "Not enough coins";
-            return String.format("§c%s\n§8%s", displayName, requirement);
+            return String.format("§c§l%s\n§8§l%s", displayName, requirement);
         }
     }
 
     private void handleKitSelection(Player player, KitDisplayInfo kitInfo) {
         // For owned kits - just select them
         kitManager.selectKit(player.getUniqueId(), kitInfo.kitName, kitInfo.level);
-        player.sendMessage(ChatColor.GREEN + "Selected kit: " +
-                (kitInfo.level == 0 ? kitInfo.kitName : kitInfo.kitLevel.getDisplayName(kitInfo.kitName)));
+        player.sendMessage(ChatColor.GREEN + "Selected kit: "
+                + (kitInfo.level == 0 ? kitInfo.kitName : kitInfo.kitLevel.getDisplayName(kitInfo.kitName)));
         player.closeInventory(); // Close the form
     }
 
@@ -187,15 +188,15 @@ public class BedrockKitSelectionUI {
     }
 
     private void openPurchaseConfirmationForm(Player player, KitDisplayInfo kitInfo) {
-        String title = "Confirm Purchase";
-        String content = String.format("Purchase §e%s §rfor §6%d coins§r?",
+        String title = "§l§eConfirm Purchase";
+        String content = String.format("Purchase §e§l%s §r§f§lfor §6§l%d coins§r§f§l?",
                 kitInfo.kitLevel.getDisplayName(kitInfo.kitName), kitInfo.kitLevel.getPrice());
 
         ModalForm form = ModalForm.builder()
                 .title(title)
                 .content(content)
-                .button1("§aConfirm")
-                .button2("§cCancel")
+                .button1("§a§lConfirm")
+                .button2("§c§lCancel")
                 .validResultHandler(response -> {
                     if (response.getClickedButtonId() == 0) {
                         boolean success = kitManager.purchaseKitLevel(minigameStatsService, player.getUniqueId(),
