@@ -87,9 +87,13 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
             if (damageByEntityEvent.getDamager() instanceof Player damager) {
                 CookiePlayer damagerCookiePlayer = PlayerManager.getPlayer(damager);
 
-                // Prevent damage from spectators or between players of the same team
-                return damager.getGameMode() != GameMode.SPECTATOR &&
-                        !microBattlesGame.arePlayersInSameTeam(cookiePlayer, damagerCookiePlayer);
+                if(damager.getGameMode() != GameMode.SPECTATOR &&
+                        !microBattlesGame.arePlayersInSameTeam(cookiePlayer, damagerCookiePlayer)) {
+                    cookiePlayer.getPlayer().setKiller(damager);
+                    return true;
+                }else {
+                    return false;
+                }
             }
         }
 
