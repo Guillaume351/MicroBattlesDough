@@ -1,14 +1,7 @@
 package com.cookiebuild.microbattles.kits;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
-
+import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.utils.LocaleManager;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
@@ -18,8 +11,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
-import com.cookiebuild.cookiedough.service.MinigameStatsService;
-import com.cookiebuild.cookiedough.utils.LocaleManager;
+import java.util.*;
 
 public class KitManager {
 
@@ -458,7 +450,7 @@ public class KitManager {
 
     private void equipKnockbackWarrior(Player player, int level) {
         ItemStack kbStick = new ItemStack(Material.STICK);
-        int knockbackLevel = Math.min(2 + level, 4);
+        int knockbackLevel = Math.min(2 + level, 3);
         kbStick.addUnsafeEnchantment(Enchantment.KNOCKBACK, knockbackLevel);
         ItemMeta meta = kbStick.getItemMeta();
         if (meta != null) {
