@@ -161,29 +161,28 @@ public class MicroBattlesGame extends Game {
             currentMatchInstance.addPerformance(perf);
         }
 
-        equipSelectedKits();
+        equipKitsForGameStart();
     }
 
-    private void equipSelectedKits() {
+    private void equipKitsForGameStart() {
         KitManager kitManager = KitManager.getInstance();
         for (CookiePlayer cookiePlayer : getPlayers()) {
-            Player player = cookiePlayer.getPlayer();
-            kitManager.equipSelectedKit(player);
+            kitManager.equipLastSelectedKit(cookiePlayer.getPlayer());
 
-            String kitName = "Default"; // Default kit name
-            // This is a placeholder, a proper implementation would get the kit name from
-            // the KitManager
-            if (kitManager.hasKitSelected(player.getUniqueId())) {
-                kitName = "Selected Kit";
+            String selectedKitName = kitManager.getSelectedKit(cookiePlayer.getPlayer().getUniqueId());
+            String kitName = "Default";
+            if (selectedKitName != null && !selectedKitName.isEmpty()) {
+                kitName = selectedKitName.split(":")[0];
             }
 
-            String originalName = player.getName();
+            String originalName = cookiePlayer.getPlayer().getName();
             String kitDisplayName = "§f" + originalName + "\n§7[" + kitName + "]";
-            player.setDisplayName(kitDisplayName);
-            player.setPlayerListName(kitDisplayName);
+            cookiePlayer.getPlayer().setDisplayName(kitDisplayName);
+            cookiePlayer.getPlayer().setPlayerListName(kitDisplayName);
 
-            player.sendMessage("§a" + LocaleManager.getMessage("kit.equipped", player.locale(), kitName));
-            player.showTitle(
+            cookiePlayer.getPlayer().sendMessage(
+                    "§a" + LocaleManager.getMessage("kit.equipped", cookiePlayer.getPlayer().locale(), kitName));
+            cookiePlayer.getPlayer().showTitle(
                     Title.title(
                             Component.text("§6" + kitName),
                             Component.text("§aKit equipped!"),

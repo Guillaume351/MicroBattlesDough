@@ -1,7 +1,14 @@
 package com.cookiebuild.microbattles.kits;
 
-import com.cookiebuild.cookiedough.service.MinigameStatsService;
-import com.cookiebuild.cookiedough.utils.LocaleManager;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
+
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
@@ -11,7 +18,9 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
-import java.util.*;
+import com.cookiebuild.cookiedough.CookieDough;
+import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.utils.LocaleManager;
 
 public class KitManager {
 
@@ -110,6 +119,10 @@ public class KitManager {
 
     public void selectKit(UUID playerId, String kitName, int level) {
         playerSelectedKits.put(playerId, kitName + ":" + level);
+
+        // Persist this choice
+        MinigameStatsService statsService = CookieDough.createMinigameStatsService();
+        statsService.setLastSelectedKit(playerId, MinigameStatsService.MICROBATTLES, kitName, level);
     }
 
     public void clearSelectedKit(UUID playerId) {
@@ -173,11 +186,31 @@ public class KitManager {
         return false;
     }
 
+    public void equipLastSelectedKit(Player player) {
+        MinigameStatsService statsService = CookieDough.createMinigameStatsService();
+        com.cookiebuild.cookiedough.model.MinigameStats stats = statsService.getOrCreateStats(player.getUniqueId(),
+                MinigameStatsService.MICROBATTLES);
+
+        String kitName = stats.getLastSelectedKitName();
+        int level = stats.getLastSelectedKitLevel();
+
+        // If a kit was previously selected and is still unlocked, equip it.
+        // Otherwise, equip the default kit.
+        if (kitName != null && !kitName.isEmpty()
+                && isKitLevelUnlocked(statsService, player.getUniqueId(), kitName, level)) {
+            equipTieredKit(player, kitName, level);
+            playerSelectedKits.put(player.getUniqueId(), kitName + ":" + level);
+        } else {
+            getOriginalKit("Default").equipPlayer(player);
+            playerSelectedKits.put(player.getUniqueId(), "Default:0");
+        }
+    }
+
     public void equipSelectedKit(Player player) {
         String selectedKit = playerSelectedKits.get(player.getUniqueId());
         if (selectedKit == null) {
-            // Equip default kit if nothing is selected
-            getOriginalKit("Default").equipPlayer(player);
+            // Fallback to last saved kit if nothing is selected in the current session
+            equipLastSelectedKit(player);
             return;
         }
 
