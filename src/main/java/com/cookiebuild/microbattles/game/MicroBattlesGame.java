@@ -429,8 +429,39 @@ public class MicroBattlesGame extends Game {
                     coinsGained += assists * 2;
 
                     stats.addExperience(xpGained);
-                    stats.addCoins(coinsGained);
                     minigameStatsService.saveStats(stats);
+
+                    PlayerData playerData = entry.getValue();
+                    if (playerData != null) {
+                        playerData.addCoins(coinsGained);
+
+                        try {
+                            if (gameEntityManager.isOpen()) {
+                                gameEntityManager.getTransaction().begin();
+                                gameEntityManager.merge(playerData);
+                                gameEntityManager.getTransaction().commit();
+                            }
+                        } catch (Exception e) {
+                            if (gameEntityManager.isOpen() && gameEntityManager.getTransaction().isActive()) {
+                                gameEntityManager.getTransaction().rollback();
+                            }
+                            MicroBattles.getInstance().getLogger()
+                                    .severe("Failed to save player data for " + playerId + ": " + e.getMessage());
+                        }
+                    }
+
+                    Player player = Bukkit.getPlayer(playerId);
+                    if (player != null && player.isOnline()) {
+                        String rewardMessage;
+                        if (isWinner) {
+                            rewardMessage = LocaleManager.getMessage("reward.victory", player.locale(), coinsGained,
+                                    xpGained);
+                        } else {
+                            rewardMessage = LocaleManager.getMessage("reward.defeat", player.locale(), coinsGained,
+                                    xpGained);
+                        }
+                        player.sendMessage(rewardMessage);
+                    }
                 }
             } catch (Exception e) {
                 MicroBattles.getInstance().getLogger().severe("Error during match finalization: " + e.getMessage());
