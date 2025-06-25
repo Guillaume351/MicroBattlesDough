@@ -70,17 +70,17 @@ public class KitManager {
 
             TieredKit tieredKit = new TieredKit(originalKit.getName());
 
-            int level1Price = originalKit.getPrice() / 3;
+            int level1Price = originalKit.getPrice() / 2;
             int level1RequiredLevel = Math.max(1, originalKit.getRequiredLevel() / 3);
             boolean level1Free = (originalKit.getName().equals("Knockback Warrior")
                     || originalKit.getName().equals("Archer"));
             if (level1Free)
                 level1Price = 0;
 
-            int level2Price = (int) (originalKit.getPrice() * 0.7);
+            int level2Price = originalKit.getPrice();
             int level2RequiredLevel = Math.max(level1RequiredLevel + 2, (originalKit.getRequiredLevel() * 2) / 3);
 
-            int level3Price = originalKit.getPrice();
+            int level3Price = originalKit.getPrice() * 2;
             int level3RequiredLevel = originalKit.getRequiredLevel();
 
             tieredKit.addLevel(1, level1Price, level1RequiredLevel, level1Free);
@@ -145,7 +145,8 @@ public class KitManager {
         return LocaleManager.getMessage(kit.getDescription(), player.locale());
     }
 
-    public boolean isKitLevelUnlocked(MinigameProgressionService statsService, UUID playerId, String kitName, int level) {
+    public boolean isKitLevelUnlocked(MinigameProgressionService statsService, UUID playerId, String kitName,
+            int level) {
         TieredKit tieredKit = getTieredKit(kitName);
         if (tieredKit == null)
             return false;
@@ -158,7 +159,8 @@ public class KitManager {
         return statsService.hasUnlockedKit(playerId, MinigameProgressionService.MICROBATTLES, tieredKitKey);
     }
 
-    public boolean canAffordKitLevel(MinigameProgressionService statsService, UUID playerId, String kitName, int level) {
+    public boolean canAffordKitLevel(MinigameProgressionService statsService, UUID playerId, String kitName,
+            int level) {
         KitLevel kitLevel = getTieredKit(kitName).getLevel(level);
         if (kitLevel == null)
             return false;
@@ -188,7 +190,8 @@ public class KitManager {
 
     public void equipLastSelectedKit(Player player) {
         MinigameProgressionService statsService = CookieDough.createMinigameProgressionService();
-        com.cookiebuild.cookiedough.model.MinigameProgression stats = statsService.getOrCreateStats(player.getUniqueId(),
+        com.cookiebuild.cookiedough.model.MinigameProgression stats = statsService.getOrCreateStats(
+                player.getUniqueId(),
                 MinigameProgressionService.MICROBATTLES);
 
         String kitName = stats.getLastSelectedKitName();
@@ -560,7 +563,7 @@ public class KitManager {
     }
 
     private void createExplosiveArcherKit() {
-        Kit kit = new Kit("Explosive Archer", 120, 7, false, "kit.explosive_archer.description");
+        Kit kit = new Kit("Explosive Archer", 500, 7, false, "kit.explosive_archer.description");
         kit.addItem(Material.BOW, 1, Enchantment.INFINITY, 1);
         kit.addItem(Material.ARROW, 1);
         kit.addItem(Material.TNT, 8);
@@ -570,7 +573,7 @@ public class KitManager {
     }
 
     private void createEndermanKit() {
-        Kit kit = new Kit("Enderman", 250, 16, false, "kit.enderman.description");
+        Kit kit = new Kit("Enderman", 1000, 16, false, "kit.enderman.description");
         kit.addItem(Material.ENDER_PEARL, 12);
         kit.addItem(Material.IRON_SWORD, 1);
         kit.setArmor(Material.IRON_HELMET, Material.LEATHER_CHESTPLATE, Material.IRON_LEGGINGS, Material.LEATHER_BOOTS);
@@ -578,7 +581,7 @@ public class KitManager {
     }
 
     private void createKnockbackWarriorKit() {
-        Kit kit = new Kit("Knockback Warrior", 50, 0, true, "kit.knockback_warrior.description");
+        Kit kit = new Kit("Knockback Warrior", 300, 0, true, "kit.knockback_warrior.description");
         ItemStack kbStick = new ItemStack(Material.STICK);
         kbStick.addUnsafeEnchantment(Enchantment.KNOCKBACK, 5);
         ItemMeta meta = kbStick.getItemMeta();
@@ -593,7 +596,7 @@ public class KitManager {
     }
 
     private void createTankKit() {
-        Kit kit = new Kit("Tank", 230, 15, false, "kit.tank.description");
+        Kit kit = new Kit("Tank", 900, 15, false, "kit.tank.description");
         kit.addItem(Material.DIAMOND_SWORD, 1);
         kit.addItem(Material.SHIELD, 1);
         kit.addItem(Material.GOLDEN_APPLE, 3);
@@ -603,7 +606,7 @@ public class KitManager {
     }
 
     private void createNinjaKit() {
-        Kit kit = new Kit("Ninja", 300, 22, false, "kit.ninja.description");
+        Kit kit = new Kit("Ninja", 1200, 22, false, "kit.ninja.description");
         kit.addItem(Material.IRON_SWORD, 1, Enchantment.SHARPNESS, 1);
         kit.addItem(Material.ENDER_PEARL, 5);
         kit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS,
@@ -612,7 +615,7 @@ public class KitManager {
     }
 
     private void createArcherKit() {
-        Kit kit = new Kit("Archer", 0, 0, true, "kit.archer.description");
+        Kit kit = new Kit("Archer", 500, 0, true, "kit.archer.description");
         kit.addItem(Material.BOW, 1, Enchantment.POWER, 2);
         kit.addItem(Material.ARROW, 32);
         kit.addItem(Material.WOODEN_SWORD, 1);
@@ -622,7 +625,7 @@ public class KitManager {
     }
 
     private void createBerserkerKit() {
-        Kit kit = new Kit("Berserker", 150, 8, false, "kit.berserker.description");
+        Kit kit = new Kit("Berserker", 600, 8, false, "kit.berserker.description");
         kit.addItem(Material.DIAMOND_AXE, 1, Enchantment.SHARPNESS, 2);
         kit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS,
                 Material.LEATHER_BOOTS);
@@ -630,7 +633,7 @@ public class KitManager {
     }
 
     private void createChemistKit() {
-        Kit kit = new Kit("Chemist", 280, 20, false, "kit.chemist.description");
+        Kit kit = new Kit("Chemist", 1100, 20, false, "kit.chemist.description");
         kit.addItem(Material.STONE_SWORD, 1);
         kit.setArmor(Material.CHAINMAIL_HELMET, Material.CHAINMAIL_CHESTPLATE, Material.CHAINMAIL_LEGGINGS,
                 Material.CHAINMAIL_BOOTS);
@@ -638,7 +641,7 @@ public class KitManager {
     }
 
     private void createAssassinKit() {
-        Kit kit = new Kit("Assassin", 350, 28, false, "kit.assassin.description");
+        Kit kit = new Kit("Assassin", 1400, 28, false, "kit.assassin.description");
         ItemStack dagger = new ItemStack(Material.GOLDEN_SWORD);
         dagger.addUnsafeEnchantment(Enchantment.SHARPNESS, 3);
         ItemMeta daggerMeta = dagger.getItemMeta();
@@ -654,7 +657,7 @@ public class KitManager {
     }
 
     private void createMinerKit() {
-        Kit kit = new Kit("Miner", 80, 3, false, "kit.miner.description");
+        Kit kit = new Kit("Miner", 300, 3, false, "kit.miner.description");
         kit.addItem(Material.DIAMOND_PICKAXE, 1, Enchantment.EFFICIENCY, 2);
         kit.addItem(Material.OAK_WOOD, 32);
         kit.addItem(Material.COBBLESTONE, 64);
@@ -663,7 +666,7 @@ public class KitManager {
     }
 
     private void createVampireKit() {
-        Kit kit = new Kit("Vampire", 220, 14, false, "kit.vampire.description");
+        Kit kit = new Kit("Vampire", 900, 14, false, "kit.vampire.description");
         ItemStack vampireSword = new ItemStack(Material.IRON_SWORD);
         ItemMeta vampireMeta = vampireSword.getItemMeta();
         if (vampireMeta != null) {
@@ -677,7 +680,7 @@ public class KitManager {
     }
 
     private void createFrostMageKit() {
-        Kit kit = new Kit("Frost Mage", 320, 25, false, "kit.frost_mage.description");
+        Kit kit = new Kit("Frost Mage", 1300, 25, false, "kit.frost_mage.description");
         ItemStack iceWand = new ItemStack(Material.STICK);
         iceWand.addUnsafeEnchantment(Enchantment.KNOCKBACK, 1);
         ItemMeta wandMeta = iceWand.getItemMeta();
@@ -694,7 +697,7 @@ public class KitManager {
     }
 
     private void createJuggernautKit() {
-        Kit kit = new Kit("Juggernaut", 400, 30, false, "kit.juggernaut.description");
+        Kit kit = new Kit("Juggernaut", 1600, 30, false, "kit.juggernaut.description");
         kit.addItem(Material.NETHERITE_AXE, 1, Enchantment.SHARPNESS, 1);
         kit.addItem(Material.SHIELD, 1);
         kit.addItem(Material.ENCHANTED_GOLDEN_APPLE, 1);
@@ -704,7 +707,7 @@ public class KitManager {
     }
 
     private void createTrapperKit() {
-        Kit kit = new Kit("Trapper", 100, 5, false, "kit.trapper.description");
+        Kit kit = new Kit("Trapper", 400, 5, false, "kit.trapper.description");
         kit.addItem(Material.STONE_SWORD, 1);
         kit.addItem(Material.TRIPWIRE_HOOK, 12);
         kit.addItem(Material.STRING, 48);
@@ -714,7 +717,7 @@ public class KitManager {
     }
 
     private void createAlchemistKit() {
-        Kit kit = new Kit("Alchemist", 200, 12, false, "kit.alchemist.description");
+        Kit kit = new Kit("Alchemist", 800, 12, false, "kit.alchemist.description");
         kit.addItem(Material.IRON_SWORD, 1);
         kit.addItem(Material.BREWING_STAND, 1);
         kit.setArmor(Material.GOLDEN_HELMET, Material.GOLDEN_CHESTPLATE, Material.GOLDEN_LEGGINGS,
@@ -723,7 +726,7 @@ public class KitManager {
     }
 
     private void createMobilityKit() {
-        Kit kit = new Kit("Mobility", 90, 4, false, "kit.mobility.description");
+        Kit kit = new Kit("Mobility", 400, 4, false, "kit.mobility.description");
         kit.addItem(Material.IRON_SWORD, 1);
         kit.addItem(Material.FEATHER, 3);
         kit.addItem(Material.SUGAR, 2);
