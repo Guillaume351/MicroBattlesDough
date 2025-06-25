@@ -19,7 +19,7 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import com.cookiebuild.cookiedough.CookieDough;
-import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
 
 public class KitManager {
@@ -121,8 +121,8 @@ public class KitManager {
         playerSelectedKits.put(playerId, kitName + ":" + level);
 
         // Persist this choice
-        MinigameStatsService statsService = CookieDough.createMinigameStatsService();
-        statsService.setLastSelectedKit(playerId, MinigameStatsService.MICROBATTLES, kitName, level);
+        MinigameProgressionService statsService = CookieDough.createMinigameProgressionService();
+        statsService.setLastSelectedKit(playerId, MinigameProgressionService.MICROBATTLES, kitName, level);
     }
 
     public void clearSelectedKit(UUID playerId) {
@@ -145,7 +145,7 @@ public class KitManager {
         return LocaleManager.getMessage(kit.getDescription(), player.locale());
     }
 
-    public boolean isKitLevelUnlocked(MinigameStatsService statsService, UUID playerId, String kitName, int level) {
+    public boolean isKitLevelUnlocked(MinigameProgressionService statsService, UUID playerId, String kitName, int level) {
         TieredKit tieredKit = getTieredKit(kitName);
         if (tieredKit == null)
             return false;
@@ -155,41 +155,41 @@ public class KitManager {
         if (kitLevel.isDefaultUnlocked())
             return true;
         String tieredKitKey = kitName + ":L" + level;
-        return statsService.hasUnlockedKit(playerId, MinigameStatsService.MICROBATTLES, tieredKitKey);
+        return statsService.hasUnlockedKit(playerId, MinigameProgressionService.MICROBATTLES, tieredKitKey);
     }
 
-    public boolean canAffordKitLevel(MinigameStatsService statsService, UUID playerId, String kitName, int level) {
+    public boolean canAffordKitLevel(MinigameProgressionService statsService, UUID playerId, String kitName, int level) {
         KitLevel kitLevel = getTieredKit(kitName).getLevel(level);
         if (kitLevel == null)
             return false;
-        return statsService.getCoins(playerId, MinigameStatsService.MICROBATTLES) >= kitLevel.getPrice();
+        return statsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES) >= kitLevel.getPrice();
     }
 
-    public boolean hasRequiredPlayerLevelForKit(MinigameStatsService statsService, UUID playerId, String kitName,
+    public boolean hasRequiredPlayerLevelForKit(MinigameProgressionService statsService, UUID playerId, String kitName,
             int level) {
         KitLevel kitLevel = getTieredKit(kitName).getLevel(level);
         if (kitLevel == null)
             return false;
-        return statsService.getLevel(playerId, MinigameStatsService.MICROBATTLES) >= kitLevel.getRequiredLevel();
+        return statsService.getLevel(playerId, MinigameProgressionService.MICROBATTLES) >= kitLevel.getRequiredLevel();
     }
 
-    public boolean purchaseKitLevel(MinigameStatsService statsService, UUID playerId, String kitName, int level) {
+    public boolean purchaseKitLevel(MinigameProgressionService statsService, UUID playerId, String kitName, int level) {
         if (!canAffordKitLevel(statsService, playerId, kitName, level)
                 || !hasRequiredPlayerLevelForKit(statsService, playerId, kitName, level)) {
             return false;
         }
         KitLevel kitLevel = getTieredKit(kitName).getLevel(level);
-        if (statsService.purchase(playerId, MinigameStatsService.MICROBATTLES, kitLevel.getPrice())) {
-            statsService.unlockKit(playerId, MinigameStatsService.MICROBATTLES, kitName + ":L" + level);
+        if (statsService.purchase(playerId, MinigameProgressionService.MICROBATTLES, kitLevel.getPrice())) {
+            statsService.unlockKit(playerId, MinigameProgressionService.MICROBATTLES, kitName + ":L" + level);
             return true;
         }
         return false;
     }
 
     public void equipLastSelectedKit(Player player) {
-        MinigameStatsService statsService = CookieDough.createMinigameStatsService();
-        com.cookiebuild.cookiedough.model.MinigameStats stats = statsService.getOrCreateStats(player.getUniqueId(),
-                MinigameStatsService.MICROBATTLES);
+        MinigameProgressionService statsService = CookieDough.createMinigameProgressionService();
+        com.cookiebuild.cookiedough.model.MinigameProgression stats = statsService.getOrCreateStats(player.getUniqueId(),
+                MinigameProgressionService.MICROBATTLES);
 
         String kitName = stats.getLastSelectedKitName();
         int level = stats.getLastSelectedKitLevel();

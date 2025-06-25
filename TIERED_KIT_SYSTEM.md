@@ -95,7 +95,7 @@ Le nouveau système de kits à niveaux remplace l'ancien système de kits fixes 
 
 ### Base de Données
 
-- Utilise `MinigameStatsService` pour stocker :
+- Utilise `MinigameProgressionService` pour stocker :
   - Kits débloqués par joueur
   - Kit actuellement sélectionné
   - Statistiques de progression

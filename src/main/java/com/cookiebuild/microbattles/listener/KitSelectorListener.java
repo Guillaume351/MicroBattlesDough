@@ -11,7 +11,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
-import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.ui.KitSelectionUI;
 
@@ -23,7 +23,7 @@ public class KitSelectorListener implements Listener {
     private static final String KIT_SELECTOR_NAME = "§6Kit Selector";
     private final KitSelectionUI kitSelectionUI;
 
-    public KitSelectorListener(KitManager kitManager, MinigameStatsService minigameStatsService,
+    public KitSelectorListener(KitManager kitManager, MinigameProgressionService minigameStatsService,
             com.cookiebuild.cookiedough.service.PlayerStatsService playerStatsService) {
         this.kitSelectionUI = new KitSelectionUI(kitManager, minigameStatsService, playerStatsService);
     }

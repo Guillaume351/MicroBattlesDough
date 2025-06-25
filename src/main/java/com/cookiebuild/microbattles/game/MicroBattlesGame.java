@@ -31,7 +31,7 @@ import com.cookiebuild.cookiedough.model.PlayerData;
 import com.cookiebuild.cookiedough.model.PlayerMatchPerformance;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
 import com.cookiebuild.cookiedough.service.MatchService;
-import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.cookiedough.ui.CustomScoreboardManager;
 import com.cookiebuild.cookiedough.utils.HibernateUtil;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
@@ -409,7 +409,7 @@ public class MicroBattlesGame extends Game {
                     perf.setGameSpecificMetrics(metrics.toString());
                 }
                 matchService.endMatch(this.currentMatchInstance, winnerPlayerDataList);
-                MinigameStatsService minigameStatsService = CookieDough.createMinigameStatsService();
+                MinigameProgressionService minigameStatsService = CookieDough.createMinigameProgressionService();
                 for (Map.Entry<UUID, PlayerData> entry : participantPlayerData.entrySet()) {
                     UUID playerId = entry.getKey();
                     boolean isWinner = winnerPlayerDataList.stream().anyMatch(pd -> pd.getId().equals(playerId));
@@ -417,8 +417,8 @@ public class MicroBattlesGame extends Game {
                     int deaths = getDeathsThisMatch(playerId);
                     int assists = playerAssistsThisMatch.getOrDefault(playerId, 0);
 
-                    com.cookiebuild.cookiedough.model.MinigameStats stats = minigameStatsService
-                            .getOrCreateStats(playerId, MinigameStatsService.MICROBATTLES);
+                    com.cookiebuild.cookiedough.model.MinigameProgression stats = minigameStatsService
+                            .getOrCreateStats(playerId, MinigameProgressionService.MICROBATTLES);
 
                     int xpGained = isWinner ? 100 : 25;
                     xpGained += kills * 10;

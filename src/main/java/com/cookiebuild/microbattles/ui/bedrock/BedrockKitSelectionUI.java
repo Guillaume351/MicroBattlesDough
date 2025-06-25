@@ -14,7 +14,7 @@ import org.geysermc.cumulus.form.SimpleForm;
 import org.geysermc.floodgate.api.FloodgateApi;
 import org.geysermc.floodgate.api.player.FloodgatePlayer;
 
-import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.microbattles.kits.Kit;
 import com.cookiebuild.microbattles.kits.KitLevel;
 import com.cookiebuild.microbattles.kits.KitManager;
@@ -24,9 +24,9 @@ import com.cookiebuild.microbattles.ui.KitDisplayInfo;
 public class BedrockKitSelectionUI {
 
     private final KitManager kitManager;
-    private final MinigameStatsService minigameStatsService;
+    private final MinigameProgressionService minigameStatsService;
 
-    public BedrockKitSelectionUI(KitManager kitManager, MinigameStatsService minigameStatsService) {
+    public BedrockKitSelectionUI(KitManager kitManager, MinigameProgressionService minigameStatsService) {
         this.kitManager = kitManager;
         this.minigameStatsService = minigameStatsService;
     }
@@ -34,9 +34,9 @@ public class BedrockKitSelectionUI {
     public void open(Player player) {
         // --- Get Player Stats ---
         UUID playerId = player.getUniqueId();
-        int playerLevel = minigameStatsService.getLevel(playerId, MinigameStatsService.MICROBATTLES);
-        int playerCoins = minigameStatsService.getCoins(playerId, MinigameStatsService.MICROBATTLES);
-        int playerXp = minigameStatsService.getOrCreateStats(playerId, MinigameStatsService.MICROBATTLES)
+        int playerLevel = minigameStatsService.getLevel(playerId, MinigameProgressionService.MICROBATTLES);
+        int playerCoins = minigameStatsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES);
+        int playerXp = minigameStatsService.getOrCreateStats(playerId, MinigameProgressionService.MICROBATTLES)
                 .getExperience();
         String statsContent = String.format("§9§lLevel: §f§l%d\n§6§lCoins: §f§l%d\n§a§lXP: §f§l%d", playerLevel,
                 playerCoins,
@@ -89,8 +89,8 @@ public class BedrockKitSelectionUI {
     private void openShopMenu(Player player) {
         // --- Get Player Stats ---
         UUID playerId = player.getUniqueId();
-        int playerLevel = minigameStatsService.getLevel(playerId, MinigameStatsService.MICROBATTLES);
-        int playerCoins = minigameStatsService.getCoins(playerId, MinigameStatsService.MICROBATTLES);
+        int playerLevel = minigameStatsService.getLevel(playerId, MinigameProgressionService.MICROBATTLES);
+        int playerCoins = minigameStatsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES);
         String statsContent = String.format("§9§lLevel: §f§l%d  §6§lCoins: §f§l%d", playerLevel, playerCoins);
 
         // --- Get, Filter, and Sort Kits ---

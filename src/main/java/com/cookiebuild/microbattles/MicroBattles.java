@@ -4,7 +4,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import com.cookiebuild.cookiedough.CookieDough;
 import com.cookiebuild.cookiedough.game.GameManager;
-import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.cookiedough.service.PlayerStatsService;
 import com.cookiebuild.microbattles.commands.KitCommand;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
@@ -39,7 +39,7 @@ public class MicroBattles extends JavaPlugin {
         MicroBattles.registerNewGame();
 
         // Initialize services and managers
-        MinigameStatsService minigameStatsService = CookieDough.createMinigameStatsService();
+        MinigameProgressionService minigameStatsService = CookieDough.createMinigameProgressionService();
         PlayerStatsService playerStatsService = CookieDough.getPlayerStatsService();
         KitManager kitManager = KitManager.getInstance();
 

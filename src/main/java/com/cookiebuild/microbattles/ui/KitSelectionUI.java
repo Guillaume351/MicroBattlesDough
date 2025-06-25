@@ -17,7 +17,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import com.cookiebuild.cookiedough.model.PlayerMatchPerformance;
-import com.cookiebuild.cookiedough.service.MinigameStatsService;
+import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.cookiedough.service.PlayerStatsService;
 import com.cookiebuild.microbattles.kits.Kit;
 import com.cookiebuild.microbattles.kits.KitLevel;
@@ -29,12 +29,12 @@ import com.cookiebuild.microbattles.ui.bedrock.BedrockUIHelper;
 public class KitSelectionUI implements Listener {
 
     private final KitManager kitManager;
-    private final MinigameStatsService minigameStatsService;
+    private final MinigameProgressionService minigameStatsService;
     private final PlayerStatsService playerStatsService;
     private final BedrockKitSelectionUI bedrockKitSelectionUI;
     private static final String JAVA_GUI_TITLE = ChatColor.DARK_AQUA + "Kit Selection";
 
-    public KitSelectionUI(KitManager kitManager, MinigameStatsService minigameStatsService,
+    public KitSelectionUI(KitManager kitManager, MinigameProgressionService minigameStatsService,
             PlayerStatsService playerStatsService) {
         this.kitManager = kitManager;
         this.minigameStatsService = minigameStatsService;
@@ -63,10 +63,10 @@ public class KitSelectionUI implements Listener {
         int deaths = performances.stream().mapToInt(PlayerMatchPerformance::getDeathsInMatch).sum();
 
         // Get progression stats
-        int playerLevel = minigameStatsService.getLevel(playerId, MinigameStatsService.MICROBATTLES);
-        int playerCoins = minigameStatsService.getCoins(playerId, MinigameStatsService.MICROBATTLES);
-        com.cookiebuild.cookiedough.model.MinigameStats progressionStats = minigameStatsService
-                .getOrCreateStats(playerId, MinigameStatsService.MICROBATTLES);
+        int playerLevel = minigameStatsService.getLevel(playerId, MinigameProgressionService.MICROBATTLES);
+        int playerCoins = minigameStatsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES);
+        com.cookiebuild.cookiedough.model.MinigameProgression progressionStats = minigameStatsService
+                .getOrCreateStats(playerId, MinigameProgressionService.MICROBATTLES);
         int playerXp = progressionStats.getExperience();
 
         List<TieredKit> tieredKits = new ArrayList<>(kitManager.getAllTieredKits());
