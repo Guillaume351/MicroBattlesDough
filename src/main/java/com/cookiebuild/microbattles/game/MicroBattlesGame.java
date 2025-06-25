@@ -122,7 +122,9 @@ public class MicroBattlesGame extends Game {
             } else {
                 MicroBattles.getInstance().getLogger().warning(
                         "Could not find PlayerData for " + player.getPlayer().getName() + " when adding to game.");
-                super.removePlayer(player);
+                removePlayer(player);
+                LobbyManager.teleportPlayerToLobby(player);
+
                 return false;
             }
             assignTeam(player);
