@@ -170,6 +170,7 @@ public class MicroBattlesGame extends Game {
         KitManager kitManager = KitManager.getInstance();
         for (CookiePlayer cookiePlayer : getPlayers()) {
             kitManager.equipLastSelectedKit(cookiePlayer.getPlayer());
+            giveTeamColoredWool(cookiePlayer);
 
             String selectedKitName = kitManager.getSelectedKit(cookiePlayer.getPlayer().getUniqueId());
             String kitName = "Default";
@@ -189,44 +190,6 @@ public class MicroBattlesGame extends Game {
                             Component.text("§6" + kitName),
                             Component.text("§aKit equipped!"),
                             Title.Times.times(Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofSeconds(1))));
-        }
-    }
-
-    @Override
-    public void registerANewGame() {
-        GameManager.addGame(new MicroBattlesGame());
-    }
-
-    public int getTeamNumber(CookiePlayer player) {
-        MicroBattlesTeam team = teams.values().stream().filter(t -> t.getPlayers().contains(player)).findFirst()
-                .orElse(null);
-        return team != null ? teams.values().stream().toList().indexOf(team) : -1;
-    }
-
-    @Override
-    protected void teleportToGame(CookiePlayer player) {
-        Location spawnLocation = map.getTeamSpawn(getTeamNumber(player));
-        World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
-
-        if (gameWorld == null) {
-            player.getPlayer()
-                    .sendMessage(LocaleManager.getMessage("game.world_not_loaded", player.getPlayer().locale()));
-            return;
-        }
-
-        spawnLocation.setWorld(gameWorld);
-        player.getPlayer().teleport(spawnLocation);
-
-        if (this.getState() != GameState.RUNNING) {
-            player.getPlayer().setGameMode(GameMode.SURVIVAL);
-            KitSelectorListener.giveKitSelectorCookie(player.getPlayer());
-            player.getPlayer().showTitle(
-                    Title.title(
-                            Component.text("§6Kit Selection"),
-                            Component.text("§aUse the cookie to choose your kit!"),
-                            Title.Times.times(Duration.ofSeconds(1), Duration.ofSeconds(3), Duration.ofSeconds(1))));
-            giveTeamColoredWool(player);
-            updatePlayerNameColor(player);
         }
     }
 
@@ -289,31 +252,30 @@ public class MicroBattlesGame extends Game {
     }
 
     private void updateGameInfo() {
-        String gameState;
-        String countdownInfo = "";
-
-        if (getState() == GameState.OPEN) {
-            gameState = "game.waiting_for_players";
-            if (getStartTimer() > 0) {
-                gameState = "";
-                countdownInfo = "Starting in " + (START_DELAY_SECONDS - getStartTimer()) + "s";
-            }
-        } else if (getState() == GameState.RUNNING) {
-            gameState = "game.running";
-            if (!wallRemoved) {
-                countdownInfo = "Wall drops in " + (WALL_REMOVE_DELAY_SECONDS - wallRemoveTimer) + "s";
-            }
-        } else {
-            gameState = "game.ended";
-        }
-
-        String finalState = gameState;
-        String finalCountdownInfo = countdownInfo;
-
         for (CookiePlayer player : getPlayers()) {
             Player bukkitPlayer = player.getPlayer();
-            bukkitPlayer.sendActionBar(Component.text(
-                    LocaleManager.getMessage(finalState, player.getPlayer().locale()) + " " + finalCountdownInfo));
+            String gameStateText = "";
+            String countdownInfo = "";
+
+            if (getState() == GameState.OPEN) {
+                gameStateText = LocaleManager.getMessage("game.waiting_for_players", bukkitPlayer.locale());
+                if (getStartTimer() > 0) {
+                    int remainingTime = inQuickStart ? QUICK_START_DELAY_SECONDS - getStartTimer()
+                            : START_DELAY_SECONDS - getStartTimer();
+                    gameStateText = ""; // No need to show waiting for players when countdown started
+                    countdownInfo = LocaleManager.getMessage("game.starting_in", bukkitPlayer.locale(), remainingTime);
+                }
+            } else if (getState() == GameState.RUNNING) {
+                gameStateText = LocaleManager.getMessage("game.running", bukkitPlayer.locale());
+                if (!wallRemoved) {
+                    countdownInfo = LocaleManager.getMessage("game.wall_drops_in", bukkitPlayer.locale(),
+                            WALL_REMOVE_DELAY_SECONDS - wallRemoveTimer);
+                }
+            } else {
+                gameStateText = LocaleManager.getMessage("game.ended", bukkitPlayer.locale());
+            }
+
+            bukkitPlayer.sendActionBar(net.kyori.adventure.text.Component.text(gameStateText + " " + countdownInfo));
             scoreboardManager.createScoreboard(bukkitPlayer, "§6§lMicroBattles");
             scoreboardManager.updateScore(bukkitPlayer, "§e", 6);
             scoreboardManager.updateScore(bukkitPlayer, "§fTeams Left: §a" + getActiveTeamsCount(), 5);
@@ -549,10 +511,16 @@ public class MicroBattlesGame extends Game {
     }
 
     public void handlePlayerFall(CookiePlayer player) {
-        handlePlayerDeath(player, null);
+        if (player.getState() == com.cookiebuild.cookiedough.player.PlayerState.IN_GAME) {
+            handlePlayerDeath(player, null);
+        }
     }
 
     public void handlePlayerDeath(CookiePlayer victim, CookiePlayer killer) {
+        if (victim.getState() != com.cookiebuild.cookiedough.player.PlayerState.IN_GAME) {
+            return;
+        }
+        victim.setState(com.cookiebuild.cookiedough.player.PlayerState.SPECTATING);
         playerDeathsThisMatch.put(victim.getPlayer().getUniqueId(),
                 getDeathsThisMatch(victim.getPlayer().getUniqueId()) + 1);
         if (killer != null) {
@@ -561,7 +529,7 @@ public class MicroBattlesGame extends Game {
             killer.getPlayer().sendMessage("§aYou killed " + getColoredPlayerName(victim));
         }
         victim.getPlayer().setGameMode(GameMode.SPECTATOR);
-        victim.getPlayer().sendMessage("§cYou died.");
+        victim.getPlayer().sendMessage(LocaleManager.getMessage("game.player_died", victim.getPlayer().locale()));
         checkForWinner();
     }
 
@@ -584,6 +552,43 @@ public class MicroBattlesGame extends Game {
                 return "III";
             default:
                 return String.valueOf(number);
+        }
+    }
+
+    @Override
+    public void registerANewGame() {
+        GameManager.addGame(new MicroBattlesGame());
+    }
+
+    public int getTeamNumber(CookiePlayer player) {
+        MicroBattlesTeam team = teams.values().stream().filter(t -> t.getPlayers().contains(player)).findFirst()
+                .orElse(null);
+        return team != null ? teams.values().stream().toList().indexOf(team) : -1;
+    }
+
+    @Override
+    protected void teleportToGame(CookiePlayer player) {
+        Location spawnLocation = map.getTeamSpawn(getTeamNumber(player));
+        World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
+
+        if (gameWorld == null) {
+            player.getPlayer()
+                    .sendMessage(LocaleManager.getMessage("game.world_not_loaded", player.getPlayer().locale()));
+            return;
+        }
+
+        spawnLocation.setWorld(gameWorld);
+        player.getPlayer().teleport(spawnLocation);
+
+        if (this.getState() != GameState.RUNNING) {
+            player.getPlayer().setGameMode(GameMode.SURVIVAL);
+            KitSelectorListener.giveKitSelectorCookie(player.getPlayer());
+            player.getPlayer().showTitle(
+                    Title.title(
+                            Component.text("§6Kit Selection"),
+                            Component.text("§aUse the cookie to choose your kit!"),
+                            Title.Times.times(Duration.ofSeconds(1), Duration.ofSeconds(3), Duration.ofSeconds(1))));
+            updatePlayerNameColor(player);
         }
     }
 }
