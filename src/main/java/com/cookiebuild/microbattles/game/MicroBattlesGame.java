@@ -20,13 +20,14 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
-import com.cookiebuild.cookiedough.CookieDough;
 import com.cookiebuild.cookiedough.dao.GenericDAOImpl;
 import com.cookiebuild.cookiedough.game.Game;
 import com.cookiebuild.cookiedough.game.GameManager;
 import com.cookiebuild.cookiedough.game.GameState;
 import com.cookiebuild.cookiedough.lobby.LobbyManager;
+import com.cookiebuild.cookiedough.lobby.LobbyScoreboard;
 import com.cookiebuild.cookiedough.model.Match;
+import com.cookiebuild.cookiedough.model.MinigameProgressionId;
 import com.cookiebuild.cookiedough.model.PlayerData;
 import com.cookiebuild.cookiedough.model.PlayerMatchPerformance;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
@@ -44,6 +45,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityTransaction;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.title.Title;
 
@@ -52,7 +54,9 @@ public class MicroBattlesGame extends Game {
     private GameMap map;
     private final HashMap<String, MicroBattlesTeam> teams = new HashMap<>();
     private final Gson gson = new Gson();
+    private final Map<UUID, Integer> playerOriginalViewDistances = new HashMap<>();
 
+    private static final int MICROBATTLES_VIEW_DISTANCE = 8;
     private static final int WALL_REMOVE_DELAY_SECONDS = 15;
     private int wallRemoveTimer = 0;
     private boolean wallRemoved = false;
@@ -371,58 +375,92 @@ public class MicroBattlesGame extends Game {
                     perf.setGameSpecificMetrics(metrics.toString());
                 }
                 matchService.endMatch(this.currentMatchInstance, winnerPlayerDataList);
-                MinigameProgressionService minigameStatsService = CookieDough.createMinigameProgressionService();
+                MinigameProgressionService minigameStatsService = new MinigameProgressionService(gameEntityManager);
                 for (Map.Entry<UUID, PlayerData> entry : participantPlayerData.entrySet()) {
                     UUID playerId = entry.getKey();
-                    boolean isWinner = winnerPlayerDataList.stream().anyMatch(pd -> pd.getId().equals(playerId));
-                    int kills = getKillsThisMatch(playerId);
-                    int deaths = getDeathsThisMatch(playerId);
-                    int assists = playerAssistsThisMatch.getOrDefault(playerId, 0);
 
-                    com.cookiebuild.cookiedough.model.MinigameProgression stats = minigameStatsService
-                            .getOrCreateStats(playerId, MinigameProgressionService.MICROBATTLES);
+                    EntityTransaction transaction = gameEntityManager.getTransaction();
+                    try {
+                        transaction.begin();
 
-                    int xpGained = isWinner ? 100 : 25;
-                    xpGained += kills * 10;
-                    xpGained += assists * 5;
+                        boolean isWinner = winnerPlayerDataList.stream().anyMatch(pd -> pd.getId().equals(playerId));
+                        int kills = getKillsThisMatch(playerId);
+                        int deaths = getDeathsThisMatch(playerId);
+                        int assists = playerAssistsThisMatch.getOrDefault(playerId, 0);
 
-                    int coinsGained = isWinner ? 50 : 10;
-                    coinsGained += kills * 5;
-                    coinsGained += assists * 2;
+                        int coinsGained = isWinner ? 50 : 10;
+                        coinsGained += kills * 5;
+                        coinsGained += assists * 2;
 
-                    stats.addExperience(xpGained);
-                    minigameStatsService.saveStats(stats);
+                        int xpGained = isWinner ? 100 : 25;
+                        xpGained += kills * 10;
+                        xpGained += assists * 5;
 
-                    PlayerData playerData = entry.getValue();
-                    if (playerData != null) {
-                        playerData.addCoins(coinsGained);
-
-                        try {
-                            if (gameEntityManager.isOpen()) {
-                                gameEntityManager.getTransaction().begin();
-                                gameEntityManager.merge(playerData);
-                                gameEntityManager.getTransaction().commit();
-                            }
-                        } catch (Exception e) {
-                            if (gameEntityManager.isOpen() && gameEntityManager.getTransaction().isActive()) {
-                                gameEntityManager.getTransaction().rollback();
-                            }
-                            MicroBattles.getInstance().getLogger()
-                                    .severe("Failed to save player data for " + playerId + ": " + e.getMessage());
+                        PlayerData playerData = entry.getValue();
+                        if (playerData != null) {
+                            playerData.addCoins(coinsGained);
+                            gameEntityManager.merge(playerData);
                         }
-                    }
 
-                    Player player = Bukkit.getPlayer(playerId);
-                    if (player != null && player.isOnline()) {
-                        String rewardMessage;
-                        if (isWinner) {
-                            rewardMessage = LocaleManager.getMessage("reward.victory", player.locale(), coinsGained,
-                                    xpGained);
+                        MinigameProgressionId id = new MinigameProgressionId(playerId,
+                                MinigameProgressionService.MICROBATTLES);
+                        com.cookiebuild.cookiedough.model.MinigameProgression stats = gameEntityManager
+                                .find(com.cookiebuild.cookiedough.model.MinigameProgression.class, id);
+
+                        int oldLevel = 1;
+                        int oldExperience = 0;
+                        if (stats == null) {
+                            stats = new com.cookiebuild.cookiedough.model.MinigameProgression(playerId,
+                                    MinigameProgressionService.MICROBATTLES);
                         } else {
-                            rewardMessage = LocaleManager.getMessage("reward.defeat", player.locale(), coinsGained,
-                                    xpGained);
+                            oldLevel = stats.getLevel();
+                            oldExperience = stats.getExperience();
                         }
-                        player.sendMessage(rewardMessage);
+
+                        stats.addExperience(xpGained);
+                        gameEntityManager.merge(stats);
+
+                        transaction.commit();
+
+                        // Log the changes for debugging
+                        MicroBattles.getInstance().getLogger().info(
+                                "Player " + playerId + " - Coins: +" + coinsGained +
+                                        ", XP: " + oldExperience + " -> " + stats.getExperience() + " (+" + xpGained
+                                        + ")" +
+                                        ", Level: " + oldLevel + " -> " + stats.getLevel());
+
+                        // Invalidate lobby scoreboard cache for this player
+                        LobbyScoreboard.invalidatePlayerCache(playerId);
+
+                        Player player = Bukkit.getPlayer(playerId);
+                        if (player != null && player.isOnline()) {
+                            // Check if player leveled up
+                            if (stats.getLevel() > oldLevel) {
+                                player.sendMessage("§6§l✦ LEVEL UP! ✦");
+                                player.sendMessage("§eYou reached level §a" + stats.getLevel() + "§e in MicroBattles!");
+                                player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f,
+                                        1.0f);
+                            }
+
+                            String rewardMessage;
+                            if (isWinner) {
+                                rewardMessage = LocaleManager.getMessage("reward.victory", player.locale(),
+                                        coinsGained,
+                                        xpGained);
+                            } else {
+                                rewardMessage = LocaleManager.getMessage("reward.defeat", player.locale(),
+                                        coinsGained,
+                                        xpGained);
+                            }
+                            player.sendMessage(rewardMessage);
+                        }
+                    } catch (Exception e) {
+                        if (transaction.isActive()) {
+                            transaction.rollback();
+                        }
+                        MicroBattles.getInstance().getLogger()
+                                .severe("Failed to save rewards for player " + playerId + ": " + e.getMessage());
+                        e.printStackTrace();
                     }
                 }
             } catch (Exception e) {
@@ -451,6 +489,12 @@ public class MicroBattlesGame extends Game {
         super.removePlayer(player);
         for (MicroBattlesTeam team : teams.values()) {
             team.removePlayer(player);
+        }
+
+        // Restore view distance
+        if (playerOriginalViewDistances.containsKey(player.getPlayer().getUniqueId())) {
+            player.getPlayer().setViewDistance(playerOriginalViewDistances.get(player.getPlayer().getUniqueId()));
+            playerOriginalViewDistances.remove(player.getPlayer().getUniqueId());
         }
 
         scoreboardManager.removeScoreboard(player.getPlayer());
@@ -568,6 +612,10 @@ public class MicroBattlesGame extends Game {
 
     @Override
     protected void teleportToGame(CookiePlayer player) {
+        // Store and set view distance
+        playerOriginalViewDistances.put(player.getPlayer().getUniqueId(), player.getPlayer().getViewDistance());
+        player.getPlayer().setViewDistance(MICROBATTLES_VIEW_DISTANCE);
+
         Location spawnLocation = map.getTeamSpawn(getTeamNumber(player));
         World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
 

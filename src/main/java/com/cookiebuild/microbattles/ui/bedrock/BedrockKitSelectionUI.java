@@ -36,11 +36,13 @@ public class BedrockKitSelectionUI {
         UUID playerId = player.getUniqueId();
         int playerLevel = minigameStatsService.getLevel(playerId, MinigameProgressionService.MICROBATTLES);
         int playerCoins = minigameStatsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES);
-        int playerXp = minigameStatsService.getOrCreateStats(playerId, MinigameProgressionService.MICROBATTLES)
-                .getExperience();
-        String statsContent = String.format("§9§lLevel: §f§l%d\n§6§lCoins: §f§l%d\n§a§lXP: §f§l%d", playerLevel,
+        com.cookiebuild.cookiedough.model.MinigameProgression progressionStats = minigameStatsService
+                .getOrCreateStats(playerId, MinigameProgressionService.MICROBATTLES);
+        int playerXp = progressionStats.getExperience();
+        int xpForNextLevel = progressionStats.getExperienceForNextLevel();
+        String statsContent = String.format("§9§lLevel: §f§l%d\n§6§lCoins: §f§l%d\n§a§lXP: §f§l%d/%d", playerLevel,
                 playerCoins,
-                playerXp);
+                playerXp, xpForNextLevel);
 
         // --- Get and Filter Kits ---
         List<KitDisplayInfo> allKits = getKitDisplayInfos(player);
@@ -91,7 +93,11 @@ public class BedrockKitSelectionUI {
         UUID playerId = player.getUniqueId();
         int playerLevel = minigameStatsService.getLevel(playerId, MinigameProgressionService.MICROBATTLES);
         int playerCoins = minigameStatsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES);
-        String statsContent = String.format("§9§lLevel: §f§l%d  §6§lCoins: §f§l%d", playerLevel, playerCoins);
+        com.cookiebuild.cookiedough.model.MinigameProgression progressionStats = minigameStatsService
+                .getOrCreateStats(playerId, MinigameProgressionService.MICROBATTLES);
+        int playerXp = progressionStats.getExperience();
+        int xpForNextLevel = progressionStats.getExperienceForNextLevel();
+        String statsContent = String.format("§9§lLevel: §f§l%d  §6§lCoins: §f§l%d\n§a§lXP: §f§l%d/%d", playerLevel, playerCoins, playerXp, xpForNextLevel);
 
         // --- Get, Filter, and Sort Kits ---
         List<KitDisplayInfo> allKits = getKitDisplayInfos(player);

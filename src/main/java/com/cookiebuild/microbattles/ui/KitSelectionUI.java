@@ -50,8 +50,8 @@ public class KitSelectionUI implements Listener {
 
         UUID playerId = player.getUniqueId();
 
-        // Calculate stats from performances
-        List<PlayerMatchPerformance> performances = playerStatsService.getPlayerPerformances(playerId)
+        // Calculate stats from performances using static method for fresh data
+        List<PlayerMatchPerformance> performances = PlayerStatsService.getPlayerPerformancesStatic(playerId)
                 .stream()
                 .filter(p -> "MicroBattles".equals(p.getMatch().getGameType()))
                 .collect(Collectors.toList());
@@ -62,12 +62,31 @@ public class KitSelectionUI implements Listener {
         int kills = performances.stream().mapToInt(PlayerMatchPerformance::getKillsInMatch).sum();
         int deaths = performances.stream().mapToInt(PlayerMatchPerformance::getDeathsInMatch).sum();
 
-        // Get progression stats
-        int playerLevel = minigameStatsService.getLevel(playerId, MinigameProgressionService.MICROBATTLES);
-        int playerCoins = minigameStatsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES);
-        com.cookiebuild.cookiedough.model.MinigameProgression progressionStats = minigameStatsService
-                .getOrCreateStats(playerId, MinigameProgressionService.MICROBATTLES);
-        int playerXp = progressionStats.getExperience();
+        // Get progression stats using fresh EntityManager for updated data
+        com.cookiebuild.cookiedough.model.MinigameProgression progressionStats;
+        int playerLevel, playerCoins, playerXp, xpForNextLevel;
+
+        try (jakarta.persistence.EntityManager freshEM = com.cookiebuild.cookiedough.utils.HibernateUtil
+                .createEntityManager()) {
+            // Get fresh progression data
+            com.cookiebuild.cookiedough.model.MinigameProgressionId id = new com.cookiebuild.cookiedough.model.MinigameProgressionId(
+                    playerId, MinigameProgressionService.MICROBATTLES);
+            progressionStats = freshEM.find(com.cookiebuild.cookiedough.model.MinigameProgression.class, id);
+
+            if (progressionStats == null) {
+                progressionStats = new com.cookiebuild.cookiedough.model.MinigameProgression(playerId,
+                        MinigameProgressionService.MICROBATTLES);
+            }
+
+            playerLevel = progressionStats.getLevel();
+            playerXp = progressionStats.getExperience();
+            xpForNextLevel = progressionStats.getExperienceForNextLevel();
+
+            // Get fresh player coins
+            com.cookiebuild.cookiedough.model.PlayerData playerData = freshEM
+                    .find(com.cookiebuild.cookiedough.model.PlayerData.class, playerId);
+            playerCoins = playerData != null ? playerData.getCoins() : 0;
+        }
 
         List<TieredKit> tieredKits = new ArrayList<>(kitManager.getAllTieredKits());
         Kit defaultKit = kitManager.getOriginalKit("Default");
@@ -112,7 +131,7 @@ public class KitSelectionUI implements Listener {
         int inventorySize = Math.max(27, (int) Math.ceil(totalSlots / 9.0) * 9);
         Inventory gui = Bukkit.createInventory(null, inventorySize, JAVA_GUI_TITLE);
 
-        addPlayerInfoItems(gui, playerLevel, playerCoins, playerXp, wins, losses, kills, deaths);
+        addPlayerInfoItems(gui, playerLevel, playerCoins, playerXp, xpForNextLevel, wins, losses, kills, deaths);
 
         int currentSlot = 9;
         if (!ownedKits.isEmpty()) {
@@ -142,7 +161,8 @@ public class KitSelectionUI implements Listener {
         player.openInventory(gui);
     }
 
-    private void addPlayerInfoItems(Inventory gui, int level, int coins, int xp, int wins, int losses, int kills,
+    private void addPlayerInfoItems(Inventory gui, int level, int coins, int xp, int xpForNextLevel, int wins,
+            int losses, int kills,
             int deaths) {
         ItemStack playerInfo = new ItemStack(Material.PLAYER_HEAD);
         ItemMeta meta = playerInfo.getItemMeta();
@@ -151,7 +171,7 @@ public class KitSelectionUI implements Listener {
             List<String> lore = new ArrayList<>();
             lore.add(ChatColor.YELLOW + "Level: " + level);
             lore.add(ChatColor.GOLD + "Coins: " + coins);
-            lore.add(ChatColor.GREEN + "XP: " + xp);
+            lore.add(ChatColor.GREEN + "XP: " + xp + "/" + xpForNextLevel);
             lore.add("");
             lore.add(ChatColor.BLUE + "Wins: " + wins);
             lore.add(ChatColor.RED + "Losses: " + losses);
