@@ -56,6 +56,11 @@ public class MicroBattlesGame extends Game {
     private final Gson gson = new Gson();
     private final Map<UUID, Integer> playerOriginalViewDistances = new HashMap<>();
 
+    // Quick start transition tracking
+    private boolean wasInQuickStart = false;
+    private int remainingTimeAtQuickStart = 0;
+    private int ticksSinceQuickStart = 0;
+
     private static final int MICROBATTLES_VIEW_DISTANCE = 8;
     private static final int WALL_REMOVE_DELAY_SECONDS = 15;
     private int wallRemoveTimer = 0;
@@ -142,6 +147,11 @@ public class MicroBattlesGame extends Game {
     @Override
     public void startGame() {
         super.startGame();
+
+        // Reset quick start tracking when game starts
+        wasInQuickStart = false;
+        remainingTimeAtQuickStart = 0;
+        ticksSinceQuickStart = 0;
 
         if (!participantPlayerData.isEmpty()) {
             this.currentMatchInstance = matchService.startMatch("MicroBattles",
@@ -241,6 +251,23 @@ public class MicroBattlesGame extends Game {
 
     @Override
     public void tick() {
+        // Track quick start transitions
+        if (inQuickStart && !wasInQuickStart) {
+            // Just transitioned to quick start - set timer to continue smoothly
+            int normalRemainingTime = START_DELAY_SECONDS - getStartTimer();
+            remainingTimeAtQuickStart = Math.min(normalRemainingTime, QUICK_START_DELAY_SECONDS);
+            wasInQuickStart = true;
+            ticksSinceQuickStart = 0;
+        } else if (!inQuickStart && wasInQuickStart) {
+            // Transitioned out of quick start
+            wasInQuickStart = false;
+            remainingTimeAtQuickStart = 0;
+            ticksSinceQuickStart = 0;
+        } else if (inQuickStart && wasInQuickStart) {
+            // Continue counting ticks since quick start
+            ticksSinceQuickStart++;
+        }
+
         super.tick();
         updateGameInfo();
 
@@ -264,8 +291,19 @@ public class MicroBattlesGame extends Game {
             if (getState() == GameState.OPEN) {
                 gameStateText = LocaleManager.getMessage("game.waiting_for_players", bukkitPlayer.locale());
                 if (getStartTimer() > 0) {
-                    int remainingTime = inQuickStart ? QUICK_START_DELAY_SECONDS - getStartTimer()
-                            : START_DELAY_SECONDS - getStartTimer();
+                    int remainingTime;
+                    if (inQuickStart && wasInQuickStart) {
+                        // Use smooth transition: countdown from where we left off
+                        remainingTime = remainingTimeAtQuickStart - ticksSinceQuickStart;
+                    } else if (inQuickStart) {
+                        // Normal quick start calculation (first tick of quick start)
+                        remainingTime = QUICK_START_DELAY_SECONDS - getStartTimer();
+                    } else {
+                        // Normal countdown
+                        remainingTime = START_DELAY_SECONDS - getStartTimer();
+                    }
+                    // Ensure remaining time is never negative or zero in display
+                    remainingTime = Math.max(1, remainingTime);
                     gameStateText = ""; // No need to show waiting for players when countdown started
                     countdownInfo = LocaleManager.getMessage("game.starting_in", bukkitPlayer.locale(), remainingTime);
                 }
@@ -638,5 +676,14 @@ public class MicroBattlesGame extends Game {
                             Title.Times.times(Duration.ofSeconds(1), Duration.ofSeconds(3), Duration.ofSeconds(1))));
             updatePlayerNameColor(player);
         }
+    }
+
+    @Override
+    public void resetGame() {
+        super.resetGame();
+        // Reset quick start tracking
+        wasInQuickStart = false;
+        remainingTimeAtQuickStart = 0;
+        ticksSinceQuickStart = 0;
     }
 }
