@@ -1,1 +1,9 @@
 rootProject.name = 'MicroBattles'
+
+def cookieDoughDir = file('../CookieDough')
+if (!cookieDoughDir.isDirectory()) {
+    throw new GradleException("CookieDough must be checked out next to MicroBattles: ${cookieDoughDir}")
+}
+
+include ':CookieDough'
+project(':CookieDough').projectDir = cookieDoughDir

@@ -39,7 +39,7 @@ import com.cookiebuild.microbattles.kits.KitManager;
 
 public class KitEffectListener implements Listener {
 
-    private final Map<UUID, Long> cooldowns = new HashMap<>();
+    private final Map<String, Long> cooldowns = new HashMap<>();
     private final Map<UUID, Boolean> assassinInvisibilityBonus = new HashMap<>();
     private final Map<UUID, Long> lastSneakTime = new HashMap<>();
 
@@ -298,7 +298,7 @@ public class KitEffectListener implements Listener {
     private boolean checkCooldown(Player player, String ability, int cooldownSeconds) {
         String key = player.getUniqueId() + "_" + ability;
         long currentTime = System.currentTimeMillis();
-        long lastUsed = cooldowns.getOrDefault(player.getUniqueId(), 0L);
+        long lastUsed = cooldowns.getOrDefault(key, 0L);
 
         if (currentTime - lastUsed < cooldownSeconds * 1000L) {
             long remainingSeconds = (cooldownSeconds * 1000L - (currentTime - lastUsed)) / 1000;
@@ -307,7 +307,7 @@ public class KitEffectListener implements Listener {
             return false;
         }
 
-        cooldowns.put(player.getUniqueId(), currentTime);
+        cooldowns.put(key, currentTime);
         return true;
     }
 

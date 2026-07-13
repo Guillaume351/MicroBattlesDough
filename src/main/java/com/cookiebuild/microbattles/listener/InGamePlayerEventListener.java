@@ -3,7 +3,6 @@ package com.cookiebuild.microbattles.listener;
 import java.util.ArrayList;
 
 import org.bukkit.GameMode;
-import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -43,8 +42,11 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
 
     private boolean isPlayerInGame(Player player) {
         CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
+        if (cookiePlayer == null) {
+            return false;
+        }
         Game game = GameManager.getGameOfPlayer(cookiePlayer);
-        return cookiePlayer != null && cookiePlayer.getState() == PlayerState.IN_GAME
+        return cookiePlayer.getState() == PlayerState.IN_GAME
                 && game instanceof MicroBattlesGame;
     }
 
@@ -56,7 +58,8 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
 
     @Override
     protected boolean shouldAllowBlockBreak(BlockBreakEvent event) {
-        return isPlayerInGame(event.getPlayer()) && isGameRunning(event.getPlayer());
+        return isPlayerInGame(event.getPlayer()) && isGameRunning(event.getPlayer())
+                && event.getBlock().getType() != org.bukkit.Material.GLASS_PANE;
     }
 
     @Override
@@ -167,18 +170,11 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
 
     @EventHandler
     public void onFireSpread(BlockIgniteEvent event) {
-        // game must be running
-        if (!isPlayerInGame(event.getPlayer()) || !isGameRunning(event.getPlayer())) {
-            event.setCancelled(true);
+        if (!protectedWorlds.contains(event.getBlock().getWorld().getName())) {
+            return;
         }
-    }
-
-    @EventHandler
-    public void onBlockBreak(BlockBreakEvent event) {
-        // TODO: fix. It shouldn't apply EVERYWHERE but only in protected worlds
-        // game must be running
-        if (!isPlayerInGame(event.getPlayer()) || !isGameRunning(event.getPlayer())
-                || event.getBlock().getType() == Material.GLASS_PANE) {
+        Player player = event.getPlayer();
+        if (player == null || !isPlayerInGame(player) || !isGameRunning(player)) {
             event.setCancelled(true);
         }
     }

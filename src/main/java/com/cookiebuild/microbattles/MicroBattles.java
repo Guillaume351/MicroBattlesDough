@@ -56,4 +56,15 @@ public class MicroBattles extends JavaPlugin {
         // Register Commands
         getCommand("kit").setExecutor(new KitCommand(kitSelectorListener));
     }
+
+    @Override
+    public void onDisable() {
+        GameManager.getGames().stream()
+                .filter(MicroBattlesGame.class::isInstance)
+                .map(MicroBattlesGame.class::cast)
+                .toList()
+                .forEach(MicroBattlesGame::shutdown);
+        MapManager.cleanupLoadedMaps();
+        instance = null;
+    }
 }

@@ -161,7 +161,7 @@ public class KitManager {
 
     public boolean canAffordKitLevel(MinigameProgressionService statsService, UUID playerId, String kitName,
             int level) {
-        KitLevel kitLevel = getTieredKit(kitName).getLevel(level);
+        KitLevel kitLevel = getKitLevel(kitName, level);
         if (kitLevel == null)
             return false;
         return statsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES) >= kitLevel.getPrice();
@@ -169,7 +169,7 @@ public class KitManager {
 
     public boolean hasRequiredPlayerLevelForKit(MinigameProgressionService statsService, UUID playerId, String kitName,
             int level) {
-        KitLevel kitLevel = getTieredKit(kitName).getLevel(level);
+        KitLevel kitLevel = getKitLevel(kitName, level);
         if (kitLevel == null)
             return false;
         return statsService.getLevel(playerId, MinigameProgressionService.MICROBATTLES) >= kitLevel.getRequiredLevel();
@@ -180,12 +180,20 @@ public class KitManager {
                 || !hasRequiredPlayerLevelForKit(statsService, playerId, kitName, level)) {
             return false;
         }
-        KitLevel kitLevel = getTieredKit(kitName).getLevel(level);
+        KitLevel kitLevel = getKitLevel(kitName, level);
+        if (kitLevel == null) {
+            return false;
+        }
         if (statsService.purchase(playerId, MinigameProgressionService.MICROBATTLES, kitLevel.getPrice())) {
             statsService.unlockKit(playerId, MinigameProgressionService.MICROBATTLES, kitName + ":L" + level);
             return true;
         }
         return false;
+    }
+
+    public KitLevel getKitLevel(String kitName, int level) {
+        TieredKit tieredKit = getTieredKit(kitName);
+        return tieredKit == null ? null : tieredKit.getLevel(level);
     }
 
     public void equipLastSelectedKit(Player player) {

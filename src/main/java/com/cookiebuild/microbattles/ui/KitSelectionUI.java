@@ -362,9 +362,13 @@ public class KitSelectionUI implements Listener {
                     player.sendMessage(ChatColor.RED + "An error occurred during purchase.");
                 }
             } else if (!kitManager.hasRequiredPlayerLevelForKit(minigameStatsService, playerId, kitName, level)) {
-                KitLevel kitLevel = kitManager.getTieredKit(kitName).getLevel(level);
-                player.sendMessage(
-                        ChatColor.RED + "You need to be level " + kitLevel.getRequiredLevel() + " to purchase this.");
+                KitLevel kitLevel = kitManager.getKitLevel(kitName, level);
+                if (kitLevel == null) {
+                    player.sendMessage(ChatColor.RED + "This kit level is no longer available.");
+                } else {
+                    player.sendMessage(ChatColor.RED + "You need to be level " + kitLevel.getRequiredLevel()
+                            + " to purchase this.");
+                }
             } else {
                 player.sendMessage(ChatColor.RED + "You don't have enough coins.");
             }

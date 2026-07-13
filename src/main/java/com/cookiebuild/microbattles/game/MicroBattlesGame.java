@@ -13,7 +13,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -92,13 +91,11 @@ public class MicroBattlesGame extends Game {
                 String randomMapName = MapManager.getRandomMapName();
                 map = MapManager.loadMapForGame(this.getGameId(), randomMapName);
                 this.wallCoordinates = MapManager.getWallCoordinatesForMap(randomMapName);
-                World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
-                if (gameWorld != null) {
-                    map.identifyWallBlocks(gameWorld, wallCoordinates);
-                }
-            } catch (IOException e) {
+                map.identifyWallBlocks(wallCoordinates);
+            } catch (IOException | RuntimeException e) {
                 MicroBattles.getInstance().getLogger()
                         .severe("Failed to load map for MicroBattlesGame: " + e.getMessage());
+                cleanupMap();
                 GameManager.removeGame(this);
             }
         });
@@ -517,6 +514,7 @@ public class MicroBattlesGame extends Game {
                 for (CookiePlayer player : getPlayers()) {
                     LobbyManager.teleportPlayerToLobby(player);
                 }
+                cleanupMap();
                 GameManager.removeGame(MicroBattlesGame.this);
             }
         }.runTaskLater(MicroBattles.getInstance(), 20L * 10);
@@ -617,11 +615,8 @@ public class MicroBattlesGame extends Game {
 
     public void respawnPlayerToTeamSpawn(CookiePlayer player) {
         Location spawnLocation = map.getTeamSpawn(getTeamNumber(player));
-        World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
-        if (gameWorld != null) {
-            spawnLocation.setWorld(gameWorld);
-            player.getPlayer().teleport(spawnLocation);
-        }
+        spawnLocation.setWorld(map.getWorld());
+        player.getPlayer().teleport(spawnLocation);
     }
 
     private String getRomanNumeral(int number) {
@@ -655,15 +650,7 @@ public class MicroBattlesGame extends Game {
         player.getPlayer().setViewDistance(MICROBATTLES_VIEW_DISTANCE);
 
         Location spawnLocation = map.getTeamSpawn(getTeamNumber(player));
-        World gameWorld = Bukkit.getWorld("game_maps/" + this.getGameId().toString());
-
-        if (gameWorld == null) {
-            player.getPlayer()
-                    .sendMessage(LocaleManager.getMessage("game.world_not_loaded", player.getPlayer().locale()));
-            return;
-        }
-
-        spawnLocation.setWorld(gameWorld);
+        spawnLocation.setWorld(map.getWorld());
         player.getPlayer().teleport(spawnLocation);
 
         if (this.getState() != GameState.RUNNING) {
@@ -685,5 +672,20 @@ public class MicroBattlesGame extends Game {
         wasInQuickStart = false;
         remainingTimeAtQuickStart = 0;
         ticksSinceQuickStart = 0;
+    }
+
+    public void cleanupMap() {
+        if (map != null && MapManager.unloadMap(map)) {
+            map = null;
+        }
+    }
+
+    public void shutdown() {
+        setState(GameState.FINISHED);
+        for (CookiePlayer player : getPlayers()) {
+            LobbyManager.teleportPlayerToLobby(player);
+        }
+        cleanupMap();
+        GameManager.removeGame(this);
     }
 }

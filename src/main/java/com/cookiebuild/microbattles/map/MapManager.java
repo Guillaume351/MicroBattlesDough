@@ -1,11 +1,14 @@
 package com.cookiebuild.microbattles.map;
 
 import com.cookiebuild.cookiedough.CookieDough;
+import com.cookiebuild.cookiedough.utils.FileUtils;
 import com.cookiebuild.cookiedough.utils.ZipUtils;
 import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.listener.InGamePlayerEventListener;
 import org.bukkit.Bukkit;
+import org.bukkit.GameRules;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.configuration.ConfigurationSection;
@@ -13,130 +16,190 @@ import org.bukkit.generator.ChunkGenerator;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Random;
+import java.util.UUID;
 
 public class MapManager {
 
     public static InGamePlayerEventListener inGamePlayerEventListener;
 
     private static final Map<String, GameMap> maps = new HashMap<>();
-
-    private static final int[][] WALL_COORDINATES = {
-            {1, 18, 171, 149, 127, 149, 171, 127},
-            {2, 18, 175, 134, 131, 153, 156, 112},
-            {3, 19, 125, 129, 81, 103, 151, 107},
-            {4, 18, 169, 102, 125, 147, 124, 80},
-            {5, 44, 22, 0, -22, 0, -22, 22},
-            {6, 24, 110, 128, 144, 127, 111, 145},
-            {7, 43, -23, 0, 23, 0, -23, 23},
-            {8, 22, 128, 119, 96, 112, 103, 136}
-    };
+    private static final Map<NamespacedKey, GameMap> loadedMaps = new HashMap<>();
 
     public static void addMap(GameMap map) {
-        MapManager.maps.put(map.getName(), map);
+        maps.put(map.getName(), map);
     }
 
     public static GameMap getMap(String name) {
-        return MapManager.maps.get(name);
+        return maps.get(name);
     }
 
     public static void removeMap(String name) {
-        MapManager.maps.remove(name);
+        maps.remove(name);
     }
 
     public static GameMap loadMapForGame(UUID gameUUID, String mapName) throws IOException {
-        GameMap map = maps.get(mapName);
-        if (map == null) {
+        if (!Bukkit.isPrimaryThread()) {
+            throw new IllegalStateException("MicroBattles worlds must be loaded on the server thread");
+        }
+        if (!maps.containsKey(mapName)) {
             throw new IllegalArgumentException("Map " + mapName + " does not exist.");
         }
 
         File zippedMap = new File("mb_maps", mapName + ".zip");
-        File gameMapDir = new File("game_maps", gameUUID.toString());
-        ZipUtils.unzip(zippedMap, gameMapDir);
+        if (!zippedMap.isFile()) {
+            throw new IOException("Map archive does not exist: " + zippedMap.getAbsolutePath());
+        }
 
-        if (!gameMapDir.exists()) {
+        NamespacedKey worldKey = new NamespacedKey(MicroBattles.getInstance(), "match_" + gameUUID);
+        File gameMapDir = getWorldFolder(worldKey).toFile();
+        if (gameMapDir.exists()) {
+            FileUtils.deleteDirectory(gameMapDir);
+        }
+        ZipUtils.unzip(zippedMap, gameMapDir);
+        Files.deleteIfExists(gameMapDir.toPath().resolve("uid.dat"));
+        Files.deleteIfExists(gameMapDir.toPath().resolve("session.lock"));
+
+        if (!gameMapDir.isDirectory()) {
             throw new IOException("Unzipped world folder does not exist: " + gameMapDir.getAbsolutePath());
         }
 
-        World world = new WorldCreator(gameMapDir.getPath())
+        World world = WorldCreator.ofKey(worldKey)
                 .environment(World.Environment.NORMAL)
                 .generateStructures(false)
                 .generator(new VoidChunkGenerator())
                 .createWorld();
 
         if (world == null) {
-            throw new IOException("Failed to create world: " + gameMapDir.getPath());
+            FileUtils.deleteDirectory(gameMapDir);
+            throw new IOException("Failed to create world: " + worldKey);
         }
 
-        CookieDough.getInstance().getLogger().info("Created world " + world.getName() + " base on map " + mapName);
-        world.setAutoSave(false);
-        world.setThundering(false);
+        try {
+            CookieDough.getInstance().getLogger()
+                    .info("Created world " + world.getKey() + " based on map " + mapName);
+            world.setAutoSave(false);
+            world.setThundering(false);
+            world.setGameRule(GameRules.SHOW_ADVANCEMENT_MESSAGES, false);
 
-        world.setGameRuleValue("announceAdvancements", "false");
+            GameMap map = new GameMap(mapName, world);
+            List<Location> teamSpawns = getTeamSpawnsForMap(mapName, world);
+            for (int i = 0; i < teamSpawns.size(); i++) {
+                map.setTeamSpawn(i, teamSpawns.get(i));
+            }
 
-        // Recreate the game map with the world loaded
-        map = new GameMap("game_maps/" + gameUUID);
+            loadedMaps.put(worldKey, map);
+            inGamePlayerEventListener.addProtectedWorld(world.getName());
+            return map;
+        } catch (RuntimeException e) {
+            if (Bukkit.unloadWorld(world, false)) {
+                FileUtils.deleteDirectory(gameMapDir);
+            }
+            throw new IOException("Failed to initialize world " + worldKey, e);
+        }
+    }
 
-        // Set team spawns
-        List<Location> teamSpawns = getTeamSpawnsForMap(mapName, world);
-        for (int i = 0; i < teamSpawns.size(); i++) {
-            map.setTeamSpawn(i, teamSpawns.get(i));
+    private static Path getWorldFolder(NamespacedKey worldKey) throws IOException {
+        World overworld = Bukkit.getWorld(NamespacedKey.minecraft("overworld"));
+        if (overworld == null) {
+            throw new IOException("The primary overworld must be loaded before MicroBattles maps");
         }
 
-        inGamePlayerEventListener.addProtectedWorld(world.getName());
+        Path dimensionsRoot = overworld.getWorldFolder().toPath().resolve("dimensions").toAbsolutePath().normalize();
+        Path worldFolder = dimensionsRoot.resolve(worldKey.getNamespace()).resolve(worldKey.getKey()).normalize();
+        if (!worldFolder.startsWith(dimensionsRoot)) {
+            throw new IOException("Invalid world key path: " + worldKey);
+        }
+        return worldFolder;
+    }
 
-        return map;
+    public static boolean unloadMap(GameMap map) {
+        if (map == null) {
+            return true;
+        }
+        if (!Bukkit.isPrimaryThread()) {
+            throw new IllegalStateException("MicroBattles worlds must be unloaded on the server thread");
+        }
+
+        World world = map.getWorld();
+        File worldFolder = world.getWorldFolder();
+        if (!Bukkit.unloadWorld(world, false)) {
+            MicroBattles.getInstance().getLogger().warning("Could not unload world " + world.getKey()
+                    + "; its files were left untouched");
+            return false;
+        }
+
+        loadedMaps.remove(world.getKey());
+        inGamePlayerEventListener.removeProtectedWorld(world.getName());
+        try {
+            FileUtils.deleteDirectory(worldFolder);
+            return true;
+        } catch (IOException e) {
+            MicroBattles.getInstance().getLogger().severe("Unloaded " + world.getKey()
+                    + " but could not delete " + worldFolder + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    public static void cleanupLoadedMaps() {
+        for (GameMap map : new ArrayList<>(loadedMaps.values())) {
+            unloadMap(map);
+        }
     }
 
     public static void loadGameMaps() {
         MicroBattles.getInstance().getLogger().info("Loading game maps...");
 
-        for (String mapName : Objects.requireNonNull(MicroBattles.getInstance().getConfig().getConfigurationSection("maps")).getKeys(false)) {
-            GameMap map = initializeMapWithCoordinates(mapName);
-            maps.put(mapName, map);
+        ConfigurationSection mapsSection = Objects.requireNonNull(
+                MicroBattles.getInstance().getConfig().getConfigurationSection("maps"),
+                "Missing maps section in config.yml");
+        for (String mapName : mapsSection.getKeys(false)) {
+            maps.put(mapName, new GameMap(mapName));
             MicroBattles.getInstance().getLogger().info("Registered map " + mapName);
         }
     }
 
-    private static GameMap initializeMapWithCoordinates(String mapName) {
-
-        GameMap gameMap = new GameMap(mapName);
-        World world = Bukkit.getWorld(mapName); // Placeholder, replace with actual way to get world instance
-
-        // TODO: Load wall coordinates from config
-
-        // Get team spawns from config
-        List<Location> teamSpawns = getTeamSpawnsForMap(mapName, world);
-        for (int i = 0; i < teamSpawns.size(); i++) {
-            gameMap.setTeamSpawn(i, teamSpawns.get(i));
-        }
-
-        return gameMap;
-    }
-
     private static List<Location> getTeamSpawnsForMap(String mapName, World world) {
-        ConfigurationSection mapSection = MicroBattles.getInstance().getConfig().getConfigurationSection("maps")
-                .getConfigurationSection(mapName);
-        List<?> teamSpawnsList = mapSection.getList("team-spawns");
+        ConfigurationSection mapsSection = Objects.requireNonNull(
+                MicroBattles.getInstance().getConfig().getConfigurationSection("maps"),
+                "Missing maps section in config.yml");
+        ConfigurationSection mapSection = Objects.requireNonNull(mapsSection.getConfigurationSection(mapName),
+                "Missing configuration for map " + mapName);
+        List<?> teamSpawnsList = Objects.requireNonNull(mapSection.getList("team-spawns"),
+                "Missing team spawns for map " + mapName);
 
         List<Location> teamSpawns = new ArrayList<>();
         for (Object location : teamSpawnsList) {
-            if (location instanceof List<?> coords) {
-                if (coords.size() == 3 && coords.get(0) instanceof Number && coords.get(1) instanceof Number && coords.get(2) instanceof Number) {
-                    double x = ((Number) coords.get(0)).doubleValue();
-                    double y = ((Number) coords.get(1)).doubleValue();
-                    double z = ((Number) coords.get(2)).doubleValue();
-                    teamSpawns.add(new Location(world, x, y, z));
-                }
+            if (location instanceof List<?> coords && coords.size() == 3
+                    && coords.get(0) instanceof Number && coords.get(1) instanceof Number
+                    && coords.get(2) instanceof Number) {
+                double x = ((Number) coords.get(0)).doubleValue();
+                double y = ((Number) coords.get(1)).doubleValue();
+                double z = ((Number) coords.get(2)).doubleValue();
+                teamSpawns.add(new Location(world, x, y, z));
             }
         }
 
+        if (teamSpawns.isEmpty()) {
+            throw new IllegalArgumentException("Map " + mapName + " has no valid team spawns");
+        }
         return teamSpawns;
     }
 
     public static int[] getWallCoordinatesForMap(String mapName) {
-        int mapNumber = Integer.parseInt(mapName.replace("game-", ""));
-        return WALL_COORDINATES[mapNumber - 1];
+        List<Integer> coordinates = MicroBattles.getInstance().getConfig()
+                .getIntegerList("maps." + mapName + ".wall-coordinates");
+        if (coordinates.size() < 4 || coordinates.size() % 2 != 0) {
+            throw new IllegalArgumentException("Invalid wall coordinates for map " + mapName);
+        }
+        return coordinates.stream().mapToInt(Integer::intValue).toArray();
     }
 
     private static class VoidChunkGenerator extends ChunkGenerator {
@@ -148,6 +211,9 @@ public class MapManager {
 
     public static String getRandomMapName() {
         ArrayList<String> mapNames = new ArrayList<>(maps.keySet());
+        if (mapNames.isEmpty()) {
+            throw new IllegalStateException("No MicroBattles maps are configured");
+        }
         return mapNames.get(new Random().nextInt(mapNames.size()));
     }
 }
