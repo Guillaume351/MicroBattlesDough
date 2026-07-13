@@ -85,6 +85,17 @@ public class MapManager {
             throw new IOException("Failed to create world: " + worldKey);
         }
 
+        Path expectedWorldFolder = gameMapDir.toPath().toAbsolutePath().normalize();
+        Path actualWorldFolder = world.getWorldFolder().toPath().toAbsolutePath().normalize();
+        if (!actualWorldFolder.equals(expectedWorldFolder)) {
+            if (Bukkit.unloadWorld(world, false)) {
+                FileUtils.deleteDirectory(actualWorldFolder.toFile());
+            }
+            FileUtils.deleteDirectory(expectedWorldFolder.toFile());
+            throw new IOException("Paper resolved world " + worldKey + " to " + actualWorldFolder
+                    + " instead of the prepared template directory " + expectedWorldFolder);
+        }
+
         try {
             CookieDough.getInstance().getLogger()
                     .info("Created world " + world.getKey() + " based on map " + mapName);
@@ -97,6 +108,8 @@ public class MapManager {
             for (int i = 0; i < teamSpawns.size(); i++) {
                 map.setTeamSpawn(i, teamSpawns.get(i));
             }
+            map.validateArenaIntegrity();
+            MicroBattles.getInstance().getLogger().info("Validated arena terrain for map " + mapName);
 
             loadedMaps.put(worldKey, map);
             inGamePlayerEventListener.addProtectedWorld(world.getName());
@@ -115,7 +128,8 @@ public class MapManager {
             throw new IOException("The primary overworld must be loaded before MicroBattles maps");
         }
 
-        Path dimensionsRoot = overworld.getWorldFolder().toPath().resolve("dimensions").toAbsolutePath().normalize();
+        Path overworldFolder = overworld.getWorldFolder().toPath().toAbsolutePath().normalize();
+        Path dimensionsRoot = WorldFolderResolver.resolveLevelFolder(overworldFolder).resolve("dimensions").normalize();
         Path worldFolder = dimensionsRoot.resolve(worldKey.getNamespace()).resolve(worldKey.getKey()).normalize();
         if (!worldFolder.startsWith(dimensionsRoot)) {
             throw new IOException("Invalid world key path: " + worldKey);

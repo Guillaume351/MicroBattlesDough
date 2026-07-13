@@ -17,6 +17,8 @@ import java.util.Set;
 
 public class GameMap {
     private static final int WALL_SEED_SEARCH_RADIUS = 3;
+    private static final int GROUND_SEARCH_DEPTH = 4;
+    private static final int TERRAIN_SAMPLE_RADIUS = 4;
     private final String name;
     private final World world;
     private final List<Location> teamSpawns;
@@ -56,6 +58,39 @@ public class GameMap {
             throw new IllegalArgumentException("Invalid team number");
         }
         return teamSpawns.get(teamNumber);
+    }
+
+    public void validateArenaIntegrity() {
+        List<ArenaIntegrity.SpawnSample> samples = new ArrayList<>();
+        for (Location spawn : teamSpawns) {
+            Chunk chunk = spawn.getChunk();
+            if (!chunk.isLoaded() && !chunk.load(true)) {
+                throw new IllegalStateException("Map " + name + " could not load the chunk for spawn " + spawn);
+            }
+
+            boolean hasGround = false;
+            for (int depth = 1; depth <= GROUND_SEARCH_DEPTH; depth++) {
+                if (getWorld().getBlockAt(spawn.getBlockX(), spawn.getBlockY() - depth, spawn.getBlockZ())
+                        .getType().isSolid()) {
+                    hasGround = true;
+                    break;
+                }
+            }
+
+            int nearbySolidBlocks = 0;
+            for (int x = -TERRAIN_SAMPLE_RADIUS; x <= TERRAIN_SAMPLE_RADIUS; x++) {
+                for (int z = -TERRAIN_SAMPLE_RADIUS; z <= TERRAIN_SAMPLE_RADIUS; z++) {
+                    for (int y = -GROUND_SEARCH_DEPTH; y <= 1; y++) {
+                        if (getWorld().getBlockAt(spawn.getBlockX() + x, spawn.getBlockY() + y,
+                                spawn.getBlockZ() + z).getType().isSolid()) {
+                            nearbySolidBlocks++;
+                        }
+                    }
+                }
+            }
+            samples.add(new ArenaIntegrity.SpawnSample(hasGround, nearbySolidBlocks));
+        }
+        ArenaIntegrity.validate(name, samples);
     }
 
     public void identifyWallBlocks(int[] coordinates) {

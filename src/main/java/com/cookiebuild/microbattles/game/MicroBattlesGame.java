@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.logging.Level;
 import java.util.stream.Collectors;
 
 import org.bukkit.Bukkit;
@@ -92,8 +93,8 @@ public class MicroBattlesGame extends Game {
                 this.wallCoordinates = MapManager.getWallCoordinatesForMap(randomMapName);
                 map.identifyWallBlocks(wallCoordinates);
             } catch (IOException | RuntimeException e) {
-                MicroBattles.getInstance().getLogger()
-                        .severe("Failed to load map for MicroBattlesGame: " + e.getMessage());
+                MicroBattles.getInstance().getLogger().log(Level.SEVERE,
+                        "Failed to load map for MicroBattlesGame: " + e.getMessage(), e);
                 cleanupMap();
                 GameManager.removeGame(this);
             }
@@ -274,6 +275,23 @@ public class MicroBattlesGame extends Game {
     @Override
     public int getPlayerCount() {
         return getPlayers().size();
+    }
+
+    @Override
+    public int getMaxAdmissiblePartySize() {
+        return teamSize;
+    }
+
+    @Override
+    public String getPartyAdmissionProblem(int partySize) {
+        String generalProblem = super.getPartyAdmissionProblem(partySize);
+        if (generalProblem != null) {
+            return generalProblem;
+        }
+        boolean teamHasRoom = teams.values().stream()
+                .anyMatch(team -> team.getPlayerCount() + partySize <= teamSize);
+        return teamHasRoom ? null
+                : "No MicroBattles team currently has room for all " + partySize + " party members.";
     }
 
     @Override
@@ -638,6 +656,10 @@ public class MicroBattlesGame extends Game {
     public void respawnPlayerToTeamSpawn(CookiePlayer player) {
         Location spawnLocation = map.getTeamSpawn(getTeamNumber(player));
         spawnLocation.setWorld(map.getWorld());
+        if (!spawnLocation.getChunk().isLoaded() && !spawnLocation.getChunk().load(true)) {
+            throw new IllegalStateException("Could not load the MicroBattles arena chunk for "
+                    + player.getPlayer().getName());
+        }
         player.getPlayer().teleport(spawnLocation);
     }
 
@@ -673,6 +695,10 @@ public class MicroBattlesGame extends Game {
 
         Location spawnLocation = map.getTeamSpawn(getTeamNumber(player));
         spawnLocation.setWorld(map.getWorld());
+        if (!spawnLocation.getChunk().isLoaded() && !spawnLocation.getChunk().load(true)) {
+            throw new IllegalStateException("Could not load the MicroBattles arena chunk for "
+                    + player.getPlayer().getName());
+        }
         player.getPlayer().teleport(spawnLocation);
 
         if (this.getState() != GameState.RUNNING) {
