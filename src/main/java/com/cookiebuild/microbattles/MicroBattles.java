@@ -28,7 +28,7 @@ public class MicroBattles extends JavaPlugin {
     @Override
     public void onEnable() {
         instance = this;
-        saveResource("config.yml", false);
+        saveDefaultConfig();
 
         // Load Maps
         InGamePlayerEventListener inGamePlayerEventListener = new InGamePlayerEventListener();
