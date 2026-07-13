@@ -10,9 +10,13 @@ import org.bukkit.block.Block;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class GameMap {
+    private static final int WALL_SEED_SEARCH_RADIUS = 3;
     private final String name;
     private final World world;
     private final List<Location> teamSpawns;
@@ -57,29 +61,77 @@ public class GameMap {
     public void identifyWallBlocks(int[] coordinates) {
         wallBlocks.clear();
         int y = coordinates[1];
+        ArrayDeque<Block> frontier = new ArrayDeque<>();
         for (int i = 2; i < coordinates.length; i += 2) {
-            Block block = getWorld().getBlockAt(coordinates[i], y, coordinates[i + 1]);
-            if (block.getType() == Material.GLASS_PANE) {
-                wallBlocks.add(block);
+            Block block = findNearestWallSeed(coordinates[i], y, coordinates[i + 1]);
+            if (block != null) {
+                frontier.add(block);
             }
         }
-    }
 
-    private List<Block> getAllGlassPanes() {
-        List<Block> blocks = new ArrayList<>();
-        for (Chunk chunk : getWorld().getLoadedChunks()) {
-            for (int x = 0; x < 16; x++) {
-                for (int z = 0; z < 16; z++) {
-                    for (int y = getWorld().getMinHeight(); y < getWorld().getMaxHeight(); y++) {
-                        Block block = chunk.getBlock(x, y, z);
-                        if (block.getType() == Material.GLASS_PANE) {
-                            blocks.add(block);
+        Set<Block> visited = new HashSet<>();
+        while (!frontier.isEmpty()) {
+            Block block = frontier.removeFirst();
+            if (!visited.add(block) || block.getType() != Material.GLASS_PANE) {
+                continue;
+            }
+            wallBlocks.add(block);
+            for (org.bukkit.block.BlockFace face : List.of(
+                    org.bukkit.block.BlockFace.NORTH, org.bukkit.block.BlockFace.SOUTH,
+                    org.bukkit.block.BlockFace.EAST, org.bukkit.block.BlockFace.WEST,
+                    org.bukkit.block.BlockFace.UP, org.bukkit.block.BlockFace.DOWN)) {
+                Block adjacent = block.getRelative(face);
+                if (!visited.contains(adjacent) && adjacent.getType() == Material.GLASS_PANE) {
+                    frontier.addLast(adjacent);
+                }
+            }
+        }
+        if (wallBlocks.isEmpty()) {
+            // Some legacy templates have stale seed coordinates. Preserve their playability
+            // by using the old loaded-chunk discovery as a bounded compatibility fallback.
+            for (Chunk chunk : getWorld().getLoadedChunks()) {
+                for (int x = 0; x < 16; x++) {
+                    for (int z = 0; z < 16; z++) {
+                        for (int blockY = getWorld().getMinHeight(); blockY < getWorld().getMaxHeight(); blockY++) {
+                            Block block = chunk.getBlock(x, blockY, z);
+                            if (block.getType() == Material.GLASS_PANE) {
+                                wallBlocks.add(block);
+                            }
                         }
                     }
                 }
             }
+            if (!wallBlocks.isEmpty()) {
+                MicroBattles.getInstance().getLogger().warning("Map " + name
+                        + " uses legacy wall discovery; refresh its wall-coordinates when the map is next edited");
+            }
         }
-        return blocks;
+    }
+
+    private Block findNearestWallSeed(int x, int y, int z) {
+        Block exact = getWorld().getBlockAt(x, y, z);
+        if (exact.getType() == Material.GLASS_PANE) {
+            return exact;
+        }
+
+        Block nearest = null;
+        int nearestDistance = Integer.MAX_VALUE;
+        for (int dx = -WALL_SEED_SEARCH_RADIUS; dx <= WALL_SEED_SEARCH_RADIUS; dx++) {
+            for (int dy = -WALL_SEED_SEARCH_RADIUS; dy <= WALL_SEED_SEARCH_RADIUS; dy++) {
+                for (int dz = -WALL_SEED_SEARCH_RADIUS; dz <= WALL_SEED_SEARCH_RADIUS; dz++) {
+                    int distance = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+                    if (distance == 0 || distance >= nearestDistance) {
+                        continue;
+                    }
+                    Block candidate = getWorld().getBlockAt(x + dx, y + dy, z + dz);
+                    if (candidate.getType() == Material.GLASS_PANE) {
+                        nearest = candidate;
+                        nearestDistance = distance;
+                    }
+                }
+            }
+        }
+        return nearest;
     }
 
     public void removeWall() {
@@ -88,7 +140,7 @@ public class GameMap {
             return;
         }
 
-        List<Block> glassBlocks = getAllGlassPanes();
+        List<Block> glassBlocks = new ArrayList<>(wallBlocks);
         new BukkitRunnable() {
             private static final int BATCH_SIZE = 100;
             private int index = 0;

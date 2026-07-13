@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -16,6 +17,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
@@ -26,33 +28,28 @@ import com.cookiebuild.cookiedough.game.GameState;
 import com.cookiebuild.cookiedough.lobby.LobbyManager;
 import com.cookiebuild.cookiedough.lobby.LobbyScoreboard;
 import com.cookiebuild.cookiedough.model.Match;
-import com.cookiebuild.cookiedough.model.MinigameProgressionId;
 import com.cookiebuild.cookiedough.model.PlayerData;
-import com.cookiebuild.cookiedough.model.PlayerMatchPerformance;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
+import com.cookiebuild.cookiedough.player.PlayerState;
 import com.cookiebuild.cookiedough.service.MatchService;
 import com.cookiebuild.cookiedough.service.MinigameProgressionService;
-import com.cookiebuild.cookiedough.ui.CustomScoreboardManager;
-import com.cookiebuild.cookiedough.utils.HibernateUtil;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.listener.KitSelectorListener;
 import com.cookiebuild.microbattles.map.GameMap;
 import com.cookiebuild.microbattles.map.MapManager;
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityTransaction;
+import com.cookiebuild.microbattles.ui.MicroBattlesScoreboardManager;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.title.Title;
 
 public class MicroBattlesGame extends Game {
     int teamSize = 3;
     private GameMap map;
-    private final HashMap<String, MicroBattlesTeam> teams = new HashMap<>();
-    private final Gson gson = new Gson();
+    private final Map<String, MicroBattlesTeam> teams = new LinkedHashMap<>();
     private final Map<UUID, Integer> playerOriginalViewDistances = new HashMap<>();
 
     // Quick start transition tracking
@@ -66,9 +63,12 @@ public class MicroBattlesGame extends Game {
     private boolean wallRemoved = false;
     private int[] wallCoordinates;
 
-    private final CustomScoreboardManager scoreboardManager;
+    private final MicroBattlesScoreboardManager scoreboardManager;
+    private static final long ASSIST_WINDOW_MILLIS = 10_000L;
+    private final Map<UUID, Map<UUID, Long>> recentAttackers = new HashMap<>();
+    private BukkitTask cleanupTask;
+    private boolean cleanupStarted;
 
-    private EntityManager gameEntityManager;
     private final MatchService matchService;
     private Match currentMatchInstance;
     private final HashMap<UUID, PlayerData> participantPlayerData = new HashMap<>();
@@ -76,15 +76,14 @@ public class MicroBattlesGame extends Game {
     private final HashMap<UUID, Integer> playerDeathsThisMatch = new HashMap<>();
     private final HashMap<UUID, Integer> playerAssistsThisMatch = new HashMap<>();
     private final HashMap<UUID, Integer> playerTeamsEliminatedThisMatch = new HashMap<>();
-    private final Map<UUID, PlayerMatchPerformance> matchPerformances = new HashMap<>();
 
     public MicroBattlesGame() {
         super("MicroBattles");
         setupTeams();
 
-        this.scoreboardManager = new CustomScoreboardManager();
-        this.gameEntityManager = HibernateUtil.createEntityManager();
-        this.matchService = new MatchService(this.gameEntityManager);
+        setCapacity(teamSize * 4);
+        this.scoreboardManager = new MicroBattlesScoreboardManager();
+        this.matchService = new MatchService(null);
 
         Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
             try {
@@ -108,18 +107,47 @@ public class MicroBattlesGame extends Game {
         teams.put("Green", new MicroBattlesTeam("Green", teamSize));
     }
 
-    public void assignTeam(CookiePlayer player) {
-        int minPlayerAmount = teams.values().stream().mapToInt(MicroBattlesTeam::getPlayerCount).min().orElse(0);
-        MicroBattlesTeam assignedTeam = teams.values().stream().filter(team -> team.getPlayerCount() <= minPlayerAmount)
-                .findFirst().orElse(null);
-        if (assignedTeam == null) {
-            throw new IllegalStateException("No team available");
+    private MicroBattlesTeam assignTeam(CookiePlayer player) {
+        var partyManager = com.cookiebuild.cookiedough.CookieDough.getInstance().getPartyManager();
+        UUID playerId = player.getPlayer().getUniqueId();
+        List<UUID> onlineParty = partyManager.getMembers(playerId).stream()
+                .filter(memberId -> {
+                    Player member = Bukkit.getPlayer(memberId);
+                    return member != null && member.isOnline();
+                })
+                .toList();
+        if (!onlineParty.isEmpty()) {
+            if (onlineParty.size() > teamSize) {
+                player.getPlayer().sendMessage("§cYour online party is larger than a MicroBattles team.");
+                return null;
+            }
+            MicroBattlesTeam partyTeam = teams.values().stream()
+                    .filter(team -> team.getPlayers().stream().anyMatch(teammate ->
+                            partyManager.arePartyMembers(playerId, teammate.getPlayer().getUniqueId())))
+                    .findFirst().orElse(null);
+            if (partyTeam != null) {
+                return partyTeam.addPlayer(player) ? partyTeam : null;
+            }
+            return teams.values().stream()
+                    .filter(team -> team.getPlayerCount() + onlineParty.size() <= teamSize)
+                    .min(java.util.Comparator.comparingInt(MicroBattlesTeam::getPlayerCount))
+                    .filter(team -> team.addPlayer(player))
+                    .orElse(null);
         }
-        assignedTeam.addPlayer(player);
+        return teams.values().stream()
+                .filter(team -> team.getPlayerCount() < teamSize)
+                .min(java.util.Comparator.comparingInt(MicroBattlesTeam::getPlayerCount))
+                .filter(team -> team.addPlayer(player))
+                .orElse(null);
     }
 
     @Override
-    public boolean addPlayer(CookiePlayer player) {
+    public synchronized boolean addPlayer(CookiePlayer player) {
+        if (player == null || map == null || getState() != GameState.OPEN || getPlayers().contains(player)
+                || getPlayers().size() >= getCapacity() || GameManager.getGameOfPlayer(player) != null) {
+            return false;
+        }
+
         if (super.addPlayer(player)) {
             GenericDAOImpl<PlayerData> playerDataDAO = new GenericDAOImpl<>(PlayerData.class);
             PlayerData pd = playerDataDAO.findById(player.getPlayer().getUniqueId());
@@ -128,13 +156,34 @@ public class MicroBattlesGame extends Game {
             } else {
                 MicroBattles.getInstance().getLogger().warning(
                         "Could not find PlayerData for " + player.getPlayer().getName() + " when adding to game.");
-                removePlayer(player);
-                LobbyManager.teleportPlayerToLobby(player);
-
+                super.removePlayer(player);
+                player.setState(PlayerState.LOBBY);
                 return false;
             }
-            assignTeam(player);
-            teleportToGame(player);
+
+            MicroBattlesTeam assignedTeam = assignTeam(player);
+            if (assignedTeam == null) {
+                participantPlayerData.remove(player.getPlayer().getUniqueId());
+                super.removePlayer(player);
+                player.setState(PlayerState.LOBBY);
+                return false;
+            }
+
+            try {
+                scoreboardManager.ensureScoreboard(player.getPlayer(),
+                        Component.text("MicroBattles", NamedTextColor.GOLD));
+                teleportToGame(player);
+                refreshNameColors();
+            } catch (RuntimeException exception) {
+                assignedTeam.removePlayer(player);
+                participantPlayerData.remove(player.getPlayer().getUniqueId());
+                super.removePlayer(player);
+                player.setState(PlayerState.LOBBY);
+                scoreboardManager.removeScoreboard(player.getPlayer());
+                MicroBattles.getInstance().getLogger().severe(
+                        "Failed to admit " + player.getPlayer().getName() + ": " + exception.getMessage());
+                return false;
+            }
             return true;
         } else {
             return false;
@@ -150,28 +199,17 @@ public class MicroBattlesGame extends Game {
         remainingTimeAtQuickStart = 0;
         ticksSinceQuickStart = 0;
 
-        if (!participantPlayerData.isEmpty()) {
-            this.currentMatchInstance = matchService.startMatch("MicroBattles",
-                    new ArrayList<>(participantPlayerData.values()));
-            if (this.currentMatchInstance != null) {
+        try {
+            if (!participantPlayerData.isEmpty()) {
+                this.currentMatchInstance = matchService.startMatch("MicroBattles",
+                        new ArrayList<>(participantPlayerData.values()));
                 MicroBattles.getInstance().getLogger()
                         .info("MicroBattles match started: " + this.currentMatchInstance.getId());
-            } else {
-                MicroBattles.getInstance().getLogger().severe("Failed to start MicroBattles match instance.");
             }
-        } else {
-            MicroBattles.getInstance().getLogger()
-                    .warning("MicroBattles game starting with no participant PlayerData recorded. Match not started.");
-        }
-
-        for (UUID playerId : participantPlayerData.keySet()) {
-            PlayerData playerData = participantPlayerData.get(playerId);
-            PlayerMatchPerformance perf = new PlayerMatchPerformance(currentMatchInstance, playerData);
-            JsonObject metrics = new JsonObject();
-            metrics.addProperty("teamsEliminated", 0);
-            perf.setGameSpecificMetrics(metrics.toString());
-            matchPerformances.put(playerId, perf);
-            currentMatchInstance.addPerformance(perf);
+        } catch (RuntimeException exception) {
+            this.currentMatchInstance = null;
+            MicroBattles.getInstance().getLogger().severe(
+                    "Match persistence is unavailable; gameplay will continue without stats: " + exception.getMessage());
         }
 
         equipKitsForGameStart();
@@ -240,10 +278,7 @@ public class MicroBattlesGame extends Game {
 
     @Override
     public boolean addPlayerToAvailableTeam(CookiePlayer player) {
-        if (isGameEnded())
-            return false;
-        this.addPlayer(player);
-        return true;
+        return !isGameEnded() && addPlayer(player);
     }
 
     @Override
@@ -315,18 +350,25 @@ public class MicroBattlesGame extends Game {
             }
 
             bukkitPlayer.sendActionBar(net.kyori.adventure.text.Component.text(gameStateText + " " + countdownInfo));
-            scoreboardManager.createScoreboard(bukkitPlayer, "§6§lMicroBattles");
-            scoreboardManager.updateScore(bukkitPlayer, "§e", 6);
-            scoreboardManager.updateScore(bukkitPlayer, "§fTeams Left: §a" + getActiveTeamsCount(), 5);
-            scoreboardManager.updateScore(bukkitPlayer, "§fKills: §a" + getPlayerKills(player), 4);
-            scoreboardManager.updateScore(bukkitPlayer, "§e", 3);
-            scoreboardManager.updateScore(bukkitPlayer, "§7", 2);
-            scoreboardManager.updateScore(bukkitPlayer, "§ewww.cookie-build.com", 1);
+            scoreboardManager.ensureScoreboard(bukkitPlayer, Component.text("MicroBattles", NamedTextColor.GOLD));
+            scoreboardManager.updateLine(bukkitPlayer, 6, Component.empty());
+            scoreboardManager.updateLine(bukkitPlayer, 5,
+                    Component.text("Teams Left: ", NamedTextColor.WHITE)
+                            .append(Component.text(getActiveTeamsCount(), NamedTextColor.GREEN)));
+            scoreboardManager.updateLine(bukkitPlayer, 4,
+                    Component.text("Kills: ", NamedTextColor.WHITE)
+                            .append(Component.text(getPlayerKills(player), NamedTextColor.GREEN)));
+            scoreboardManager.updateLine(bukkitPlayer, 3, Component.text(" "));
+            scoreboardManager.updateLine(bukkitPlayer, 2, Component.text("  "));
+            scoreboardManager.updateLine(bukkitPlayer, 1,
+                    Component.text("www.cookie-build.com", NamedTextColor.YELLOW));
 
             int line = 11;
             for (MicroBattlesTeam team : teams.values()) {
-                scoreboardManager.updateScore(bukkitPlayer, team.getName() + ": " + team.getAlivePlayers().size(),
-                        line--);
+                scoreboardManager.updateLine(bukkitPlayer, line--,
+                        Component.text(getTeamMarker(team.getName()) + " " + team.getName() + ": ",
+                                getTeamTextColor(team.getName()))
+                                .append(Component.text(team.getAlivePlayers().size(), NamedTextColor.WHITE)));
             }
         }
     }
@@ -356,6 +398,17 @@ public class MicroBattlesGame extends Game {
                 playerAssistsThisMatch.getOrDefault(assister.getPlayer().getUniqueId(), 0) + 1);
     }
 
+    /** Records eligible enemy damage so a later elimination can award assists. */
+    public void recordDamage(CookiePlayer victim, CookiePlayer attacker) {
+        if (getState() != GameState.RUNNING || victim == null || attacker == null || victim.equals(attacker)
+                || !getPlayers().contains(victim) || !getPlayers().contains(attacker)
+                || arePlayersInSameTeam(victim, attacker)) {
+            return;
+        }
+        recentAttackers.computeIfAbsent(victim.getPlayer().getUniqueId(), ignored -> new HashMap<>())
+                .put(attacker.getPlayer().getUniqueId(), System.currentTimeMillis());
+    }
+
     private void removeWall() {
         wallRemoved = true;
         map.removeWall();
@@ -378,6 +431,9 @@ public class MicroBattlesGame extends Game {
     }
 
     private void endGame(MicroBattlesTeam winningTeam) {
+        if (getState() == GameState.FINISHED) {
+            return;
+        }
         setState(GameState.FINISHED);
 
         List<PlayerData> winnerPlayerDataList = new ArrayList<>();
@@ -392,141 +448,72 @@ public class MicroBattlesGame extends Game {
 
         if (this.currentMatchInstance != null) {
             try {
-                for (Map.Entry<UUID, PlayerData> entry : participantPlayerData.entrySet()) {
-                    UUID playerId = entry.getKey();
-                    PlayerMatchPerformance perf = matchPerformances.get(playerId);
-                    if (perf == null) {
-                        MicroBattles.getInstance().getLogger().warning("No performance record found for player "
-                                + playerId + " in match " + currentMatchInstance.getId());
-                        continue;
-                    }
-                    perf.setKillsInMatch(playerKillsThisMatch.getOrDefault(playerId, 0));
-                    perf.setDeathsInMatch(playerDeathsThisMatch.getOrDefault(playerId, 0));
-                    perf.setAssistsInMatch(playerAssistsThisMatch.getOrDefault(playerId, 0));
-                    JsonObject metrics = gson.fromJson(perf.getGameSpecificMetrics(), JsonObject.class);
-                    if (metrics == null)
-                        metrics = new JsonObject();
-                    metrics.addProperty("teamsEliminated", playerTeamsEliminatedThisMatch.getOrDefault(playerId, 0));
-                    perf.setGameSpecificMetrics(metrics.toString());
-                }
-                matchService.endMatch(this.currentMatchInstance, winnerPlayerDataList);
-                MinigameProgressionService minigameStatsService = new MinigameProgressionService(gameEntityManager);
-                for (Map.Entry<UUID, PlayerData> entry : participantPlayerData.entrySet()) {
-                    UUID playerId = entry.getKey();
-
-                    EntityTransaction transaction = gameEntityManager.getTransaction();
-                    try {
-                        transaction.begin();
-
-                        boolean isWinner = winnerPlayerDataList.stream().anyMatch(pd -> pd.getId().equals(playerId));
-                        int kills = getKillsThisMatch(playerId);
-                        int deaths = getDeathsThisMatch(playerId);
-                        int assists = playerAssistsThisMatch.getOrDefault(playerId, 0);
-
-                        int coinsGained = isWinner ? 50 : 10;
-                        coinsGained += kills * 5;
-                        coinsGained += assists * 2;
-
-                        int xpGained = isWinner ? 100 : 25;
-                        xpGained += kills * 10;
-                        xpGained += assists * 5;
-
-                        PlayerData playerData = entry.getValue();
-                        if (playerData != null) {
-                            playerData.addCoins(coinsGained);
-                            gameEntityManager.merge(playerData);
-                        }
-
-                        MinigameProgressionId id = new MinigameProgressionId(playerId,
-                                MinigameProgressionService.MICROBATTLES);
-                        com.cookiebuild.cookiedough.model.MinigameProgression stats = gameEntityManager
-                                .find(com.cookiebuild.cookiedough.model.MinigameProgression.class, id);
-
-                        int oldLevel = 1;
-                        int oldExperience = 0;
-                        if (stats == null) {
-                            stats = new com.cookiebuild.cookiedough.model.MinigameProgression(playerId,
-                                    MinigameProgressionService.MICROBATTLES);
-                        } else {
-                            oldLevel = stats.getLevel();
-                            oldExperience = stats.getExperience();
-                        }
-
-                        stats.addExperience(xpGained);
-                        gameEntityManager.merge(stats);
-
-                        transaction.commit();
-
-                        // Log the changes for debugging
-                        MicroBattles.getInstance().getLogger().info(
-                                "Player " + playerId + " - Coins: +" + coinsGained +
-                                        ", XP: " + oldExperience + " -> " + stats.getExperience() + " (+" + xpGained
-                                        + ")" +
-                                        ", Level: " + oldLevel + " -> " + stats.getLevel());
-
-                        // Invalidate lobby scoreboard cache for this player
-                        LobbyScoreboard.invalidatePlayerCache(playerId);
-
-                        Player player = Bukkit.getPlayer(playerId);
-                        if (player != null && player.isOnline()) {
-                            // Check if player leveled up
-                            if (stats.getLevel() > oldLevel) {
-                                player.sendMessage("§6§l✦ LEVEL UP! ✦");
-                                player.sendMessage("§eYou reached level §a" + stats.getLevel() + "§e in MicroBattles!");
-                                player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f,
-                                        1.0f);
-                            }
-
-                            String rewardMessage;
-                            if (isWinner) {
-                                rewardMessage = LocaleManager.getMessage("reward.victory", player.locale(),
-                                        coinsGained,
-                                        xpGained);
-                            } else {
-                                rewardMessage = LocaleManager.getMessage("reward.defeat", player.locale(),
-                                        coinsGained,
-                                        xpGained);
-                            }
-                            player.sendMessage(rewardMessage);
-                        }
-                    } catch (Exception e) {
-                        if (transaction.isActive()) {
-                            transaction.rollback();
-                        }
-                        MicroBattles.getInstance().getLogger()
-                                .severe("Failed to save rewards for player " + playerId + ": " + e.getMessage());
-                        e.printStackTrace();
-                    }
-                }
+                List<MatchService.Performance> performances = participantPlayerData.keySet().stream()
+                        .map(playerId -> {
+                            boolean winner = winnerPlayerDataList.stream()
+                                    .anyMatch(player -> player.getId().equals(playerId));
+                            return new MatchService.Performance(playerId,
+                                getKillsThisMatch(playerId), getDeathsThisMatch(playerId),
+                                playerAssistsThisMatch.getOrDefault(playerId, 0),
+                                createPerformanceMetrics(playerId, winner));
+                        })
+                        .toList();
+                matchService.completeMatch(this.currentMatchInstance, winnerPlayerDataList, performances);
             } catch (Exception e) {
                 MicroBattles.getInstance().getLogger().severe("Error during match finalization: " + e.getMessage());
-                e.printStackTrace();
-            } finally {
-                if (gameEntityManager.isOpen()) {
-                    gameEntityManager.close();
-                }
             }
         }
 
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                for (CookiePlayer player : getPlayers()) {
-                    LobbyManager.teleportPlayerToLobby(player);
+        MinigameProgressionService progressionService = new MinigameProgressionService(null);
+        String rewardSource = currentMatchInstance == null
+                ? "micro-game:" + getGameId() + ":reward"
+                : "match:" + currentMatchInstance.getId() + ":micro-reward";
+        for (UUID playerId : participantPlayerData.keySet()) {
+            boolean isWinner = winnerPlayerDataList.stream().anyMatch(player -> player.getId().equals(playerId));
+            int kills = getKillsThisMatch(playerId);
+            int assists = playerAssistsThisMatch.getOrDefault(playerId, 0);
+            int coinsGained = (isWinner ? 50 : 10) + kills * 5 + assists * 2;
+            int xpGained = (isWinner ? 100 : 25) + kills * 10 + assists * 5;
+            try {
+                int oldLevel = progressionService.getLevel(playerId, MinigameProgressionService.MICROBATTLES);
+                var stats = progressionService.applyReward(playerId, MinigameProgressionService.MICROBATTLES,
+                        xpGained, coinsGained, rewardSource);
+                LobbyScoreboard.invalidatePlayerCache(playerId);
+                Player player = Bukkit.getPlayer(playerId);
+                if (player != null && player.isOnline()) {
+                    if (stats.getLevel() > oldLevel) {
+                        player.sendMessage("§6§l✦ LEVEL UP! ✦");
+                        player.sendMessage("§eYou reached level §a" + stats.getLevel() + "§e in MicroBattles!");
+                        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
+                    }
+                    player.sendMessage(LocaleManager.getMessage(isWinner ? "reward.victory" : "reward.defeat",
+                            player.locale(), coinsGained, xpGained));
                 }
-                cleanupMap();
-                GameManager.removeGame(MicroBattlesGame.this);
+            } catch (RuntimeException exception) {
+                MicroBattles.getInstance().getLogger()
+                        .severe("Failed to save rewards for player " + playerId + ": " + exception.getMessage());
             }
-        }.runTaskLater(MicroBattles.getInstance(), 20L * 10);
+        }
+        for (UUID playerId : participantPlayerData.keySet()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null && player.isOnline()) {
+                boolean winner = winnerPlayerDataList.stream().anyMatch(candidate -> candidate.getId().equals(playerId));
+                com.cookiebuild.cookiedough.CookieDough.getInstance().getGoalTracker()
+                        .recordMatch(player, "MicroBattles", winner, getKillsThisMatch(playerId));
+            }
+        }
+        sendPostMatchSummary(winnerPlayerDataList);
+        offerReplay();
+        scheduleCleanup(20L * 10);
     }
 
     @Override
-    public void removePlayer(CookiePlayer player) {
+    public synchronized void removePlayer(CookiePlayer player) {
+        boolean wasParticipant = getPlayers().contains(player);
         super.removePlayer(player);
-        for (MicroBattlesTeam team : teams.values()) {
-            team.removePlayer(player);
+        if (!wasParticipant) {
+            return;
         }
-
         // Restore view distance
         if (playerOriginalViewDistances.containsKey(player.getPlayer().getUniqueId())) {
             player.getPlayer().setViewDistance(playerOriginalViewDistances.get(player.getPlayer().getUniqueId()));
@@ -534,11 +521,19 @@ public class MicroBattlesGame extends Game {
         }
 
         scoreboardManager.removeScoreboard(player.getPlayer());
+        recentAttackers.remove(player.getPlayer().getUniqueId());
+        recentAttackers.values().forEach(attackers -> attackers.remove(player.getPlayer().getUniqueId()));
+        refreshNameColors();
         if (getState() == GameState.RUNNING) {
             checkForWinner();
         } else {
             participantPlayerData.remove(player.getPlayer().getUniqueId());
         }
+    }
+
+    @Override
+    protected void onPlayerRemoved(CookiePlayer player) {
+        teams.values().forEach(team -> team.removePlayer(player));
     }
 
     public boolean arePlayersInSameTeam(CookiePlayer player1, CookiePlayer player2) {
@@ -557,16 +552,7 @@ public class MicroBattlesGame extends Game {
     }
 
     public void updatePlayerNameColor(CookiePlayer player) {
-        String teamColor = getPlayerTeamColor(player);
-        if (teamColor != null) {
-            Scoreboard scoreboard = player.getPlayer().getScoreboard();
-            Team team = scoreboard.getTeam(teamColor);
-            if (team == null) {
-                team = scoreboard.registerNewTeam(teamColor);
-            }
-            team.setPrefix(getColorCode(teamColor));
-            team.addEntry(player.getPlayer().getName());
-        }
+        refreshNameColors();
     }
 
     private String getColorCode(String teamColor) {
@@ -586,7 +572,8 @@ public class MicroBattlesGame extends Game {
 
     public String getColoredPlayerName(CookiePlayer player) {
         String teamColor = getPlayerTeamColor(player);
-        return teamColor != null ? getColorCode(teamColor) + player.getPlayer().getName()
+        return teamColor != null ? getColorCode(teamColor) + getTeamMarker(teamColor) + " "
+                + player.getPlayer().getName()
                 : player.getPlayer().getName();
     }
 
@@ -597,16 +584,51 @@ public class MicroBattlesGame extends Game {
     }
 
     public void handlePlayerDeath(CookiePlayer victim, CookiePlayer killer) {
-        if (victim.getState() != com.cookiebuild.cookiedough.player.PlayerState.IN_GAME) {
+        if (getState() != GameState.RUNNING || victim == null || victim.getState() != PlayerState.IN_GAME) {
             return;
         }
-        victim.setState(com.cookiebuild.cookiedough.player.PlayerState.SPECTATING);
+        UUID victimId = victim.getPlayer().getUniqueId();
+        long cutoff = System.currentTimeMillis() - ASSIST_WINDOW_MILLIS;
+        Map<UUID, Long> attackers = recentAttackers.remove(victimId);
+        if (attackers != null) {
+            if (killer == null) {
+                UUID latestAttackerId = attackers.entrySet().stream()
+                        .filter(entry -> entry.getValue() >= cutoff)
+                        .max(Map.Entry.comparingByValue())
+                        .map(Map.Entry::getKey).orElse(null);
+                if (latestAttackerId != null) {
+                    killer = getPlayers().stream()
+                            .filter(player -> player.getPlayer().getUniqueId().equals(latestAttackerId))
+                            .filter(player -> !arePlayersInSameTeam(victim, player))
+                            .findFirst().orElse(null);
+                }
+            }
+            UUID killerId = killer == null ? null : killer.getPlayer().getUniqueId();
+            attackers.entrySet().stream()
+                    .filter(entry -> entry.getValue() >= cutoff && !entry.getKey().equals(killerId))
+                    .map(entry -> getPlayers().stream()
+                            .filter(player -> player.getPlayer().getUniqueId().equals(entry.getKey()))
+                            .findFirst().orElse(null))
+                    .filter(java.util.Objects::nonNull)
+                    .filter(assister -> !arePlayersInSameTeam(victim, assister))
+                    .forEach(this::recordAssist);
+        }
+
+        MicroBattlesTeam victimTeam = getPlayerTeam(victim);
+        victim.setState(PlayerState.SPECTATING);
         playerDeathsThisMatch.put(victim.getPlayer().getUniqueId(),
                 getDeathsThisMatch(victim.getPlayer().getUniqueId()) + 1);
-        if (killer != null) {
+        if (killer != null && !arePlayersInSameTeam(victim, killer)) {
             playerKillsThisMatch.put(killer.getPlayer().getUniqueId(),
                     getKillsThisMatch(killer.getPlayer().getUniqueId()) + 1);
             killer.getPlayer().sendMessage("§aYou killed " + getColoredPlayerName(victim));
+            boolean teamEliminated = victimTeam != null && victimTeam.getPlayers().stream()
+                    .filter(player -> !player.equals(victim))
+                    .noneMatch(player -> player.getState() == PlayerState.IN_GAME
+                            && player.getPlayer().getGameMode() != GameMode.SPECTATOR);
+            if (teamEliminated) {
+                playerTeamsEliminatedThisMatch.merge(killer.getPlayer().getUniqueId(), 1, Integer::sum);
+            }
         }
         victim.getPlayer().setGameMode(GameMode.SPECTATOR);
         victim.getPlayer().sendMessage(LocaleManager.getMessage("game.player_died", victim.getPlayer().locale()));
@@ -681,10 +703,143 @@ public class MicroBattlesGame extends Game {
     }
 
     public void shutdown() {
-        setState(GameState.FINISHED);
-        for (CookiePlayer player : getPlayers()) {
-            LobbyManager.teleportPlayerToLobby(player);
+        if (getState() != GameState.FINISHED) {
+            setState(GameState.FINISHED);
         }
+        cleanupGameResources();
+    }
+
+    private Map<String, Object> createPerformanceMetrics(UUID playerId, boolean winner) {
+        Map<String, Object> metrics = new HashMap<>();
+        CookiePlayer player = getPlayers().stream()
+                .filter(candidate -> candidate.getPlayer().getUniqueId().equals(playerId))
+                .findFirst().orElse(null);
+        MicroBattlesTeam team = player == null ? null : getPlayerTeam(player);
+        metrics.put("team", team == null ? "Unknown" : team.getName());
+
+        String selection = KitManager.getInstance().getSelectedKit(playerId);
+        String[] parts = selection == null ? new String[0] : selection.split(":", 2);
+        metrics.put("kit", parts.length > 0 && !parts[0].isBlank() ? parts[0] : "Default");
+        int tier = 0;
+        if (parts.length == 2) {
+            try {
+                tier = Integer.parseInt(parts[1]);
+            } catch (NumberFormatException ignored) {
+                tier = 0;
+            }
+        }
+        metrics.put("kitTier", tier);
+        metrics.put("teamsEliminated", playerTeamsEliminatedThisMatch.getOrDefault(playerId, 0));
+        metrics.put("won", winner);
+        metrics.put("weeklyRotation", KitManager.getInstance().getWeeklyFreeKits());
+        return metrics;
+    }
+
+    private void refreshNameColors() {
+        for (CookiePlayer viewer : getPlayers()) {
+            Player viewerPlayer = viewer.getPlayer();
+            scoreboardManager.ensureScoreboard(viewerPlayer, Component.text("MicroBattles", NamedTextColor.GOLD));
+            Scoreboard scoreboard = scoreboardManager.getScoreboard(viewerPlayer);
+            if (scoreboard == null) {
+                continue;
+            }
+            for (MicroBattlesTeam microTeam : teams.values()) {
+                String scoreboardTeamName = "mb_" + microTeam.getName().toLowerCase();
+                Team scoreboardTeam = scoreboard.getTeam(scoreboardTeamName);
+                if (scoreboardTeam == null) {
+                    scoreboardTeam = scoreboard.registerNewTeam(scoreboardTeamName);
+                }
+                scoreboardTeam.color(getTeamTextColor(microTeam.getName()));
+                scoreboardTeam.prefix(Component.text(getColorCode(microTeam.getName())
+                        + getTeamMarker(microTeam.getName()) + " "));
+                for (String entry : new ArrayList<>(scoreboardTeam.getEntries())) {
+                    scoreboardTeam.removeEntry(entry);
+                }
+                for (CookiePlayer teammate : microTeam.getPlayers()) {
+                    scoreboardTeam.addEntry(teammate.getPlayer().getName());
+                }
+            }
+        }
+    }
+
+    private NamedTextColor getTeamTextColor(String teamName) {
+        return switch (teamName.toLowerCase()) {
+            case "red" -> NamedTextColor.RED;
+            case "blue" -> NamedTextColor.BLUE;
+            case "yellow" -> NamedTextColor.YELLOW;
+            case "green" -> NamedTextColor.GREEN;
+            default -> NamedTextColor.WHITE;
+        };
+    }
+
+    private String getTeamMarker(String teamName) {
+        return switch (teamName.toLowerCase()) {
+            case "red" -> "●";
+            case "blue" -> "◆";
+            case "yellow" -> "▲";
+            case "green" -> "■";
+            default -> "◇";
+        };
+    }
+
+    private void sendPostMatchSummary(List<PlayerData> winners) {
+        for (UUID playerId : participantPlayerData.keySet()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null || !player.isOnline()) {
+                continue;
+            }
+            boolean winner = winners.stream().anyMatch(candidate -> candidate.getId().equals(playerId));
+            String outcome = winners.isEmpty() ? "DRAW" : winner ? "VICTORY" : "ELIMINATED";
+            NamedTextColor outcomeColor = winner ? NamedTextColor.GREEN
+                    : winners.isEmpty() ? NamedTextColor.YELLOW : NamedTextColor.RED;
+            player.showTitle(Title.title(Component.text(outcome, outcomeColor),
+                    Component.text("Your contribution", NamedTextColor.GRAY),
+                    Title.Times.times(Duration.ofMillis(250), Duration.ofSeconds(3), Duration.ofSeconds(1))));
+            player.sendMessage(Component.text("──────── Match Summary ────────", NamedTextColor.GOLD));
+            player.sendMessage(Component.text("Kills " + getKillsThisMatch(playerId), NamedTextColor.GREEN)
+                    .append(Component.text("  •  Assists "
+                            + playerAssistsThisMatch.getOrDefault(playerId, 0), NamedTextColor.AQUA))
+                    .append(Component.text("  •  Teams eliminated "
+                            + playerTeamsEliminatedThisMatch.getOrDefault(playerId, 0), NamedTextColor.YELLOW)));
+            player.sendMessage(Component.text(
+                    com.cookiebuild.cookiedough.CookieDough.getInstance().getGoalTracker().summary(playerId),
+                    NamedTextColor.LIGHT_PURPLE));
+            player.sendMessage(Component.text("[SHARE FEEDBACK]", NamedTextColor.YELLOW)
+                    .clickEvent(ClickEvent.openUrl("https://www.cookie-build.com"))
+                    .hoverEvent(HoverEvent.showText(Component.text(
+                            "Share ideas and report kit or map balance issues", NamedTextColor.GRAY))));
+        }
+    }
+
+    private void scheduleCleanup(long delayTicks) {
+        if (cleanupStarted || cleanupTask != null) {
+            return;
+        }
+        cleanupTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                cleanupTask = null;
+                cleanupGameResources();
+            }
+        }.runTaskLater(MicroBattles.getInstance(), delayTicks);
+    }
+
+    private synchronized void cleanupGameResources() {
+        if (cleanupStarted) {
+            return;
+        }
+        cleanupStarted = true;
+        if (cleanupTask != null) {
+            cleanupTask.cancel();
+            cleanupTask = null;
+        }
+        for (CookiePlayer player : new ArrayList<>(getPlayers())) {
+            if (player.getPlayer().isOnline()) {
+                LobbyManager.teleportPlayerToLobby(player);
+            }
+            removePlayer(player);
+        }
+        scoreboardManager.clear();
         cleanupMap();
         GameManager.removeGame(this);
     }

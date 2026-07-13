@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.UUID;
+import java.util.ArrayDeque;
 
 public class MapManager {
 
@@ -32,6 +33,8 @@ public class MapManager {
 
     private static final Map<String, GameMap> maps = new HashMap<>();
     private static final Map<NamespacedKey, GameMap> loadedMaps = new HashMap<>();
+    private static final ArrayDeque<String> recentMaps = new ArrayDeque<>();
+    private static final NextMapVote nextMapVote = new NextMapVote();
 
     public static void addMap(GameMap map) {
         maps.put(map.getName(), map);
@@ -161,9 +164,14 @@ public class MapManager {
                 MicroBattles.getInstance().getConfig().getConfigurationSection("maps"),
                 "Missing maps section in config.yml");
         for (String mapName : mapsSection.getKeys(false)) {
+            ConfigurationSection mapSection = Objects.requireNonNull(mapsSection.getConfigurationSection(mapName),
+                    "Missing configuration for map " + mapName);
+            MapConfigurationValidator.validate(mapName, mapSection.getList("team-spawns"),
+                    mapSection.getList("wall-coordinates"));
             maps.put(mapName, new GameMap(mapName));
             MicroBattles.getInstance().getLogger().info("Registered map " + mapName);
         }
+        nextMapVote.configure(maps.keySet());
     }
 
     private static List<Location> getTeamSpawnsForMap(String mapName, World world) {
@@ -187,8 +195,8 @@ public class MapManager {
             }
         }
 
-        if (teamSpawns.isEmpty()) {
-            throw new IllegalArgumentException("Map " + mapName + " has no valid team spawns");
+        if (teamSpawns.size() != MapConfigurationValidator.TEAM_COUNT) {
+            throw new IllegalArgumentException("Map " + mapName + " must have exactly four valid team spawns");
         }
         return teamSpawns;
     }
@@ -209,11 +217,41 @@ public class MapManager {
         }
     }
 
-    public static String getRandomMapName() {
+    public static synchronized String getRandomMapName() {
         ArrayList<String> mapNames = new ArrayList<>(maps.keySet());
         if (mapNames.isEmpty()) {
             throw new IllegalStateException("No MicroBattles maps are configured");
         }
-        return mapNames.get(new Random().nextInt(mapNames.size()));
+        String selected = nextMapVote.consumeWinner();
+        if (selected == null || !maps.containsKey(selected)) {
+            List<String> candidates = mapNames.stream().filter(name -> !recentMaps.contains(name)).toList();
+            if (candidates.isEmpty()) {
+                recentMaps.clear();
+                candidates = mapNames;
+            }
+            selected = candidates.get(new Random().nextInt(candidates.size()));
+        }
+        recentMaps.addLast(selected);
+        int historySize = Math.min(2, Math.max(0, mapNames.size() - 1));
+        while (recentMaps.size() > historySize) {
+            recentMaps.removeFirst();
+        }
+        return selected;
+    }
+
+    public static boolean voteForNextMap(UUID playerId, String mapName) {
+        return nextMapVote.vote(playerId, mapName);
+    }
+
+    public static void removeNextMapVote(UUID playerId) {
+        nextMapVote.removeVote(playerId);
+    }
+
+    public static Map<String, Long> getNextMapVoteTallies() {
+        return nextMapVote.tallies();
+    }
+
+    public static List<String> getConfiguredMapNames() {
+        return nextMapVote.availableMaps();
     }
 }

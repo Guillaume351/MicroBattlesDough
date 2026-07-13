@@ -1,36 +1,44 @@
 package com.cookiebuild.microbattles.kits;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import com.cookiebuild.cookiedough.CookieDough;
+import com.cookiebuild.cookiedough.game.Game;
+import com.cookiebuild.cookiedough.game.GameManager;
+import com.cookiebuild.cookiedough.player.CookiePlayer;
+import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.service.MinigameProgressionService;
-import com.cookiebuild.cookiedough.utils.LocaleManager;
+import com.cookiebuild.microbattles.MicroBattles;
+import com.cookiebuild.microbattles.game.MicroBattlesGame;
+import com.cookiebuild.microbattles.listener.KitSelectorListener;
 
-public class KitManager {
-
+/** Kit catalog, unlock policy and balanced sidegrade loadouts. */
+public final class KitManager {
     private static KitManager instance;
     private final Map<String, Kit> originalKits = new HashMap<>();
     private final Map<String, TieredKit> tieredKits = new HashMap<>();
-    private final Map<UUID, String> playerSelectedKits = new HashMap<>(); // "kitName:level"
+    private final Map<UUID, String> playerSelectedKits = new HashMap<>();
 
     private KitManager() {
-        initializeOriginalKits();
+        initializeCatalog();
         initializeTieredKits();
     }
 
@@ -41,57 +49,57 @@ public class KitManager {
         return instance;
     }
 
-    private void initializeOriginalKits() {
-        // This is where the definitions from the old KitManager go.
-        createDefaultKit();
-        createExplosiveArcherKit();
-        createEndermanKit();
-        createKnockbackWarriorKit();
-        createTankKit();
-        createNinjaKit();
-        createArcherKit();
-        createBerserkerKit();
-        createChemistKit();
-        createAssassinKit();
-        createMinerKit();
-        createVampireKit();
-        createFrostMageKit();
-        createJuggernautKit();
-        createTrapperKit();
-        createAlchemistKit();
-        createMobilityKit();
+    private void initializeCatalog() {
+        Kit defaultKit = register("Default", 0, 0, true);
+        defaultKit.addItem(Material.STONE_SWORD, 1);
+        defaultKit.addItem(Material.BOW, 1);
+        defaultKit.addItem(Material.GOLDEN_PICKAXE, 1);
+        defaultKit.addItem(Material.ARROW, 24);
+        defaultKit.addItem(Material.BREAD, 5);
+        defaultKit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE,
+                Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
+
+        register("Explosive Archer", 500, 7, false);
+        register("Enderman", 1_000, 16, false);
+        register("Knockback Warrior", 300, 0, true);
+        register("Tank", 900, 15, false);
+        register("Ninja", 1_200, 22, false);
+        register("Archer", 500, 0, true);
+        register("Berserker", 600, 8, false);
+        register("Chemist", 1_100, 20, false);
+        register("Assassin", 1_400, 28, false);
+        register("Miner", 300, 3, false);
+        register("Vampire", 900, 14, false);
+        register("Frost Mage", 1_300, 25, false);
+        register("Juggernaut", 1_600, 30, false);
+        register("Trapper", 400, 5, false);
+        register("Alchemist", 800, 12, false);
+        register("Mobility", 400, 4, false);
+    }
+
+    private Kit register(String name, int price, int requiredLevel, boolean defaultUnlocked) {
+        String key = "kit." + name.toLowerCase(java.util.Locale.ROOT).replace(' ', '_') + ".description";
+        Kit kit = new Kit(name, price, requiredLevel, defaultUnlocked, key);
+        originalKits.put(name, kit);
+        return kit;
     }
 
     private void initializeTieredKits() {
-        for (Kit originalKit : originalKits.values()) {
-            if (originalKit.getName().equals("Default")) {
-                continue; // Skip Default kit
+        for (Kit kit : originalKits.values()) {
+            if (kit.getName().equals("Default")) {
+                continue;
             }
-
-            TieredKit tieredKit = new TieredKit(originalKit.getName());
-
-            int level1Price = originalKit.getPrice() / 2;
-            int level1RequiredLevel = Math.max(1, originalKit.getRequiredLevel() / 3);
-            boolean level1Free = (originalKit.getName().equals("Knockback Warrior")
-                    || originalKit.getName().equals("Archer"));
-            if (level1Free)
-                level1Price = 0;
-
-            int level2Price = originalKit.getPrice();
-            int level2RequiredLevel = Math.max(level1RequiredLevel + 2, (originalKit.getRequiredLevel() * 2) / 3);
-
-            int level3Price = originalKit.getPrice() * 2;
-            int level3RequiredLevel = originalKit.getRequiredLevel();
-
-            tieredKit.addLevel(1, level1Price, level1RequiredLevel, level1Free);
-            tieredKit.addLevel(2, level2Price, level2RequiredLevel, false);
-            tieredKit.addLevel(3, level3Price, level3RequiredLevel, false);
-
-            tieredKits.put(originalKit.getName(), tieredKit);
+            TieredKit tiered = new TieredKit(kit.getName());
+            boolean starter = kit.getName().equals("Knockback Warrior") || kit.getName().equals("Archer");
+            tiered.addLevel(1, starter ? 0 : kit.getPrice() / 2,
+                    Math.max(1, kit.getRequiredLevel() / 3), starter);
+            tiered.addLevel(2, kit.getPrice(),
+                    Math.max(Math.max(1, kit.getRequiredLevel() / 3) + 2, kit.getRequiredLevel() * 2 / 3), false);
+            tiered.addLevel(3, kit.getPrice() * 2, kit.getRequiredLevel(), false);
+            tieredKits.put(kit.getName(), tiered);
         }
     }
 
-    // Public API for Kits
     public TieredKit getTieredKit(String baseName) {
         return tieredKits.get(baseName);
     }
@@ -110,19 +118,14 @@ public class KitManager {
 
     public Kit getRandomOriginalKit() {
         List<Kit> kits = new ArrayList<>(originalKits.values());
-        kits.removeIf(kit -> kit.getName().equals("Default")); // Don't give default randomly
-        if (kits.isEmpty()) {
-            return getOriginalKit("Default"); // Fallback
-        }
-        return kits.get(new Random().nextInt(kits.size()));
+        kits.removeIf(kit -> kit.getName().equals("Default"));
+        return kits.isEmpty() ? originalKits.get("Default") : kits.get(new Random().nextInt(kits.size()));
     }
 
     public void selectKit(UUID playerId, String kitName, int level) {
         playerSelectedKits.put(playerId, kitName + ":" + level);
-
-        // Persist this choice
-        MinigameProgressionService statsService = CookieDough.createMinigameProgressionService();
-        statsService.setLastSelectedKit(playerId, MinigameProgressionService.MICROBATTLES, kitName, level);
+        CookieDough.createMinigameProgressionService().setLastSelectedKit(playerId,
+                MinigameProgressionService.MICROBATTLES, kitName, level);
     }
 
     public void clearSelectedKit(UUID playerId) {
@@ -137,609 +140,323 @@ public class KitManager {
         return playerSelectedKits.get(playerId);
     }
 
+    public int getSelectedTier(UUID playerId) {
+        String selected = playerSelectedKits.get(playerId);
+        if (selected == null) {
+            return 0;
+        }
+        String[] parts = selected.split(":", 2);
+        try {
+            return parts.length == 2 ? Integer.parseInt(parts[1]) : 0;
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    public List<String> getWeeklyFreeKits() {
+        return WeeklyKitRotation.forDate(tieredKits.keySet(), LocalDate.now());
+    }
+
+    public boolean isWeeklyFreeKit(String kitName) {
+        return WeeklyKitRotation.contains(tieredKits.keySet(), LocalDate.now(), kitName);
+    }
+
     public String getKitDescription(String kitName, Player player) {
-        Kit kit = getOriginalKit(kitName);
-        if (kit == null) {
-            return "Unknown kit.";
-        }
-        return LocaleManager.getMessage(kit.getDescription(), player.locale());
+        return switch (kitName) {
+            case "Default" -> "Reliable sword, bow, blocks and food.";
+            case "Explosive Archer" -> "Limited arrows create a small enemy-only blast on impact.";
+            case "Enderman" -> "A light melee kit with a few repositioning pearls.";
+            case "Tank" -> "Shield and extra armor, traded for permanent Slowness.";
+            case "Ninja" -> "Fast skirmisher with snowballs and double-sneak stealth.";
+            case "Archer" -> "Long-range pressure with more arrows, but weak melee gear.";
+            case "Berserker" -> "Axe fighter who briefly gains Strength below 30% health.";
+            case "Chemist" -> "Carries useful single-use drinkable potions.";
+            case "Assassin" -> "Double-sneak stealth empowers one carefully timed melee hit.";
+            case "Miner" -> "Fast mining and extra blocks for map control, with weak combat gear.";
+            case "Vampire" -> "Restores a small amount of health on enemy melee hits.";
+            case "Frost Mage" -> "Snowballs slow enemies; the wand creates a short temporary ice bridge.";
+            case "Juggernaut" -> "Heavy armor, axe and shield at the cost of severe Slowness.";
+            case "Trapper" -> "Cobwebs and utility supplies reward controlling narrow routes.";
+            case "Alchemist" -> "The brewing stand grants one random short self-buff on cooldown.";
+            case "Knockback Warrior" -> "Controls ledges with Knockback I but deals little direct damage.";
+            case "Mobility" -> "Permanent Speed and light gear for rotations and escapes.";
+            default -> "Unknown kit.";
+        };
     }
 
-    public boolean isKitLevelUnlocked(MinigameProgressionService statsService, UUID playerId, String kitName,
-            int level) {
-        TieredKit tieredKit = getTieredKit(kitName);
-        if (tieredKit == null)
-            return false;
-        KitLevel kitLevel = tieredKit.getLevel(level);
-        if (kitLevel == null)
-            return false;
-        if (kitLevel.isDefaultUnlocked())
-            return true;
-        String tieredKitKey = kitName + ":L" + level;
-        return statsService.hasUnlockedKit(playerId, MinigameProgressionService.MICROBATTLES, tieredKitKey);
-    }
-
-    public boolean canAffordKitLevel(MinigameProgressionService statsService, UUID playerId, String kitName,
-            int level) {
-        KitLevel kitLevel = getKitLevel(kitName, level);
-        if (kitLevel == null)
-            return false;
-        return statsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES) >= kitLevel.getPrice();
-    }
-
-    public boolean hasRequiredPlayerLevelForKit(MinigameProgressionService statsService, UUID playerId, String kitName,
-            int level) {
-        KitLevel kitLevel = getKitLevel(kitName, level);
-        if (kitLevel == null)
-            return false;
-        return statsService.getLevel(playerId, MinigameProgressionService.MICROBATTLES) >= kitLevel.getRequiredLevel();
-    }
-
-    public boolean purchaseKitLevel(MinigameProgressionService statsService, UUID playerId, String kitName, int level) {
-        if (!canAffordKitLevel(statsService, playerId, kitName, level)
-                || !hasRequiredPlayerLevelForKit(statsService, playerId, kitName, level)) {
-            return false;
-        }
+    public boolean isKitLevelUnlocked(MinigameProgressionService service, UUID playerId, String kitName, int level) {
         KitLevel kitLevel = getKitLevel(kitName, level);
         if (kitLevel == null) {
             return false;
         }
-        if (statsService.purchase(playerId, MinigameProgressionService.MICROBATTLES, kitLevel.getPrice())) {
-            statsService.unlockKit(playerId, MinigameProgressionService.MICROBATTLES, kitName + ":L" + level);
+        if (kitLevel.isDefaultUnlocked() || (level == 1 && isWeeklyFreeKit(kitName))) {
             return true;
         }
-        return false;
+        return service.hasUnlockedKit(playerId, MinigameProgressionService.MICROBATTLES, kitName + ":L" + level);
+    }
+
+    public boolean canAffordKitLevel(MinigameProgressionService service, UUID playerId, String kitName, int level) {
+        KitLevel kitLevel = getKitLevel(kitName, level);
+        return kitLevel != null && service.getCoins(playerId, MinigameProgressionService.MICROBATTLES)
+                >= kitLevel.getPrice();
+    }
+
+    public boolean hasRequiredPlayerLevelForKit(MinigameProgressionService service, UUID playerId,
+            String kitName, int level) {
+        KitLevel kitLevel = getKitLevel(kitName, level);
+        return kitLevel != null && service.getLevel(playerId, MinigameProgressionService.MICROBATTLES)
+                >= kitLevel.getRequiredLevel();
+    }
+
+    public boolean purchaseKitLevel(MinigameProgressionService service, UUID playerId, String kitName, int level) {
+        KitLevel kitLevel = getKitLevel(kitName, level);
+        if (kitLevel == null || !hasRequiredPlayerLevelForKit(service, playerId, kitName, level)
+                || (level > 1 && !isKitLevelUnlocked(service, playerId, kitName, level - 1))) {
+            return false;
+        }
+        return service.purchaseAndUnlockKit(playerId, MinigameProgressionService.MICROBATTLES,
+                kitName + ":L" + level, kitLevel.getPrice());
     }
 
     public KitLevel getKitLevel(String kitName, int level) {
-        TieredKit tieredKit = getTieredKit(kitName);
-        return tieredKit == null ? null : tieredKit.getLevel(level);
+        TieredKit kit = tieredKits.get(kitName);
+        return kit == null ? null : kit.getLevel(level);
     }
 
     public void equipLastSelectedKit(Player player) {
-        MinigameProgressionService statsService = CookieDough.createMinigameProgressionService();
-        com.cookiebuild.cookiedough.model.MinigameProgression stats = statsService.getOrCreateStats(
-                player.getUniqueId(),
-                MinigameProgressionService.MICROBATTLES);
-
+        MinigameProgressionService service = CookieDough.createMinigameProgressionService();
+        var stats = service.getOrCreateStats(player.getUniqueId(), MinigameProgressionService.MICROBATTLES);
         String kitName = stats.getLastSelectedKitName();
         int level = stats.getLastSelectedKitLevel();
-
-        // If a kit was previously selected and is still unlocked, equip it.
-        // Otherwise, equip the default kit.
-        if (kitName != null && !kitName.isEmpty()
-                && isKitLevelUnlocked(statsService, player.getUniqueId(), kitName, level)) {
+        if (kitName != null && !kitName.isBlank()
+                && isKitLevelUnlocked(service, player.getUniqueId(), kitName, level)) {
             equipTieredKit(player, kitName, level);
             playerSelectedKits.put(player.getUniqueId(), kitName + ":" + level);
         } else {
-            getOriginalKit("Default").equipPlayer(player);
+            originalKits.get("Default").equipPlayer(player);
             playerSelectedKits.put(player.getUniqueId(), "Default:0");
         }
     }
 
     public void equipSelectedKit(Player player) {
-        String selectedKit = playerSelectedKits.get(player.getUniqueId());
-        if (selectedKit == null) {
-            // Fallback to last saved kit if nothing is selected in the current session
+        String selected = playerSelectedKits.get(player.getUniqueId());
+        if (selected == null) {
             equipLastSelectedKit(player);
             return;
         }
-
-        String[] parts = selectedKit.split(":");
-        if (parts.length != 2)
-            return;
-
-        String kitName = parts[0];
-        int level = Integer.parseInt(parts[1]);
-
-        equipTieredKit(player, kitName, level);
+        String[] parts = selected.split(":", 2);
+        if (parts.length == 2) {
+            equipTieredKit(player, parts[0], Integer.parseInt(parts[1]));
+        }
     }
 
-    // Kit Equipping Logic
+    public boolean previewKit(Player player, String kitName, int level) {
+        CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
+        Game game = cookiePlayer == null ? null : GameManager.getGameOfPlayer(cookiePlayer);
+        if (!(game instanceof MicroBattlesGame) || game.hasStarted() || getKitLevel(kitName, level) == null) {
+            return false;
+        }
+        equipTieredKit(player, kitName, level);
+        player.sendMessage(ChatColor.AQUA + "Previewing " + kitName + " " + roman(level)
+                + " for 8 seconds. Your selection was not changed.");
+        Bukkit.getScheduler().runTaskLater(MicroBattles.getInstance(), () -> {
+            CookiePlayer current = PlayerManager.getPlayer(player);
+            Game currentGame = current == null ? null : GameManager.getGameOfPlayer(current);
+            if (currentGame == game && !game.hasStarted() && player.isOnline()) {
+                player.getInventory().clear();
+                player.getInventory().setArmorContents(null);
+                KitSelectorListener.giveKitSelectorCookie(player);
+            }
+        }, 160L);
+        return true;
+    }
+
     private void equipTieredKit(Player player, String kitName, int level) {
         player.getInventory().clear();
+        player.getInventory().setArmorContents(null);
+        player.getInventory().setItemInOffHand(null);
         for (PotionEffect effect : player.getActivePotionEffects()) {
             player.removePotionEffect(effect.getType());
         }
-
+        int tier = Math.max(1, Math.min(3, level));
         switch (kitName) {
-            case "Explosive Archer":
-                equipExplosiveArcher(player, level);
-                break;
-            case "Enderman":
-                equipEnderman(player, level);
-                break;
-            case "Tank":
-                equipTank(player, level);
-                break;
-            case "Ninja":
-                equipNinja(player, level);
-                break;
-            case "Archer":
-                equipArcher(player, level);
-                break;
-            case "Berserker":
-                equipBerserker(player, level);
-                break;
-            case "Chemist":
-                equipChemist(player, level);
-                break;
-            case "Assassin":
-                equipAssassin(player, level);
-                break;
-            case "Miner":
-                equipMiner(player, level);
-                break;
-            case "Vampire":
-                equipVampire(player, level);
-                break;
-            case "Frost Mage":
-                equipFrostMage(player, level);
-                break;
-            case "Juggernaut":
-                equipJuggernaut(player, level);
-                break;
-            case "Trapper":
-                equipTrapper(player, level);
-                break;
-            case "Alchemist":
-                equipAlchemist(player, level);
-                break;
-            case "Knockback Warrior":
-                equipKnockbackWarrior(player, level);
-                break;
-            case "Mobility":
-                equipMobility(player, level);
-                break;
-            default:
-                Kit originalKit = getOriginalKit(kitName);
-                if (originalKit != null) {
-                    originalKit.equipPlayer(player);
-                }
-                break;
+            case "Explosive Archer" -> equipExplosiveArcher(player, tier);
+            case "Enderman" -> equipEnderman(player, tier);
+            case "Tank" -> equipTank(player, tier);
+            case "Ninja" -> equipNinja(player, tier);
+            case "Archer" -> equipArcher(player, tier);
+            case "Berserker" -> equipBerserker(player, tier);
+            case "Chemist" -> equipChemist(player, tier);
+            case "Assassin" -> equipAssassin(player, tier);
+            case "Miner" -> equipMiner(player, tier);
+            case "Vampire" -> equipVampire(player, tier);
+            case "Frost Mage" -> equipFrostMage(player, tier);
+            case "Juggernaut" -> equipJuggernaut(player, tier);
+            case "Trapper" -> equipTrapper(player, tier);
+            case "Alchemist" -> equipAlchemist(player, tier);
+            case "Knockback Warrior" -> equipKnockbackWarrior(player, tier);
+            case "Mobility" -> equipMobility(player, tier);
+            default -> originalKits.get("Default").equipPlayer(player);
         }
     }
 
-    private void equipExplosiveArcher(Player player, int level) {
-        ItemStack bow = new ItemStack(Material.BOW);
-        if (level >= 2)
-            bow.addEnchantment(Enchantment.POWER, 1);
-        if (level >= 3)
-            bow.addEnchantment(Enchantment.FLAME, 1);
-        player.getInventory().setItem(0, bow);
-        player.getInventory().setItem(1, new ItemStack(Material.ARROW, 16 + (level * 8)));
-        player.getInventory().setItem(2, new ItemStack(Material.TNT, level * 2));
-        if (level >= 2)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 0));
+    private void equipExplosiveArcher(Player player, int tier) {
+        give(player, Material.BOW, 1, Material.ARROW, 8 + tier * 4, Material.WOODEN_SWORD, 1);
+        setLeatherArmor(player);
     }
 
-    private void equipEnderman(Player player, int level) {
-        ItemStack sword = new ItemStack(Material.IRON_SWORD);
-        if (level >= 3)
-            sword.addEnchantment(Enchantment.SHARPNESS, 1);
-        player.getInventory().setItem(0, sword);
-        player.getInventory().setItem(1, new ItemStack(Material.ENDER_PEARL, 2 + level));
-        if (level >= 2)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 0));
-        if (level >= 3)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0));
+    private void equipEnderman(Player player, int tier) {
+        give(player, Material.STONE_SWORD, 1, Material.ENDER_PEARL, tier);
+        setLeatherArmor(player);
     }
 
-    private void equipTank(Player player, int level) {
-        ItemStack sword = new ItemStack(Material.STONE_SWORD);
-        if (level >= 2)
-            sword = new ItemStack(Material.IRON_SWORD);
-        if (level >= 3)
-            sword.addEnchantment(Enchantment.SHARPNESS, 1);
-        player.getInventory().setItem(0, sword);
-        if (level >= 1)
-            player.getInventory().setItem(8, new ItemStack(Material.SHIELD));
-        Material armorMaterial = level == 1 ? Material.LEATHER_CHESTPLATE
-                : level == 2 ? Material.CHAINMAIL_CHESTPLATE : Material.IRON_CHESTPLATE;
-        player.getInventory().setChestplate(new ItemStack(armorMaterial));
-        if (level >= 2)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, Integer.MAX_VALUE, 0));
-        if (level >= 3)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, Integer.MAX_VALUE, 0));
+    private void equipTank(Player player, int tier) {
+        give(player, Material.STONE_SWORD, 1);
+        setLeatherArmor(player);
+        player.getInventory().setItemInOffHand(new ItemStack(Material.SHIELD));
+        player.getInventory().setChestplate(new ItemStack(Material.CHAINMAIL_CHESTPLATE));
+        if (tier >= 2) player.getInventory().setHelmet(new ItemStack(Material.CHAINMAIL_HELMET));
+        if (tier >= 3) player.getInventory().setLeggings(new ItemStack(Material.CHAINMAIL_LEGGINGS));
+        permanent(player, PotionEffectType.SLOWNESS, 0);
     }
 
-    private void equipNinja(Player player, int level) {
-        ItemStack sword = new ItemStack(Material.STONE_SWORD);
-        if (level >= 2)
-            sword = new ItemStack(Material.IRON_SWORD);
-        if (level >= 3)
-            sword.addEnchantment(Enchantment.SHARPNESS, 1);
-        player.getInventory().setItem(0, sword);
-        player.getInventory().setItem(1, new ItemStack(Material.SNOWBALL, 6 + (level * 2)));
-        int speedLevel = Math.min(level - 1, 1);
-        player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, speedLevel));
-        if (level >= 2)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.JUMP_BOOST, Integer.MAX_VALUE, 0));
-        if (level >= 3)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.JUMP_BOOST, Integer.MAX_VALUE, 1));
+    private void equipNinja(Player player, int tier) {
+        give(player, Material.WOODEN_SWORD, 1, Material.SNOWBALL, 6 + tier * 2);
+        setLeatherArmor(player);
+        permanent(player, PotionEffectType.SPEED, 0);
+        if (tier >= 3) permanent(player, PotionEffectType.JUMP_BOOST, 0);
     }
 
-    private void equipArcher(Player player, int level) {
-        ItemStack bow = new ItemStack(Material.BOW);
-        if (level >= 2)
-            bow.addEnchantment(Enchantment.POWER, 1);
-        if (level >= 3)
-            bow.addEnchantment(Enchantment.INFINITY, 1);
-        player.getInventory().setItem(0, bow);
-        int arrowCount = level >= 3 ? 1 : 32 + (level * 16);
-        player.getInventory().setItem(1, new ItemStack(Material.ARROW, arrowCount));
-        if (level >= 2)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 0));
+    private void equipArcher(Player player, int tier) {
+        give(player, Material.BOW, 1, Material.ARROW, 16 + tier * 8, Material.WOODEN_SWORD, 1);
+        setLeatherArmor(player);
     }
 
-    private void equipBerserker(Player player, int level) {
-        ItemStack axe = new ItemStack(Material.STONE_AXE);
-        if (level >= 2)
-            axe = new ItemStack(Material.IRON_AXE);
-        if (level >= 3) {
-            axe = new ItemStack(Material.IRON_AXE);
-            axe.addEnchantment(Enchantment.SHARPNESS, 1);
-        }
-        player.getInventory().setItem(0, axe);
-        int strengthLevel = Math.min(level - 1, 1);
-        if (level >= 1)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.STRENGTH, Integer.MAX_VALUE, strengthLevel));
-        if (level >= 3)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 0));
+    private void equipBerserker(Player player, int tier) {
+        give(player, Material.STONE_AXE, 1, Material.BREAD, tier + 1);
+        setLeatherArmor(player);
     }
 
-    private void equipChemist(Player player, int level) {
-        player.getInventory().setItem(0, new ItemStack(Material.STONE_SWORD));
-        player.getInventory().setItem(1, new ItemStack(Material.SPLASH_POTION, level * 2));
-        if (level >= 2)
-            player.getInventory().setItem(2, new ItemStack(Material.LINGERING_POTION, level));
-        if (level >= 3)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, Integer.MAX_VALUE, 0));
+    private void equipChemist(Player player, int tier) {
+        give(player, Material.STONE_SWORD, 1);
+        player.getInventory().addItem(createPotion("Swiftness Tonic", PotionEffectType.SPEED, 240 + tier * 40));
+        if (tier >= 2) player.getInventory().addItem(
+                createPotion("Regeneration Tonic", PotionEffectType.REGENERATION, 120 + tier * 20));
+        if (tier >= 3) player.getInventory().addItem(
+                createPotion("Absorption Tonic", PotionEffectType.ABSORPTION, 240));
+        setLeatherArmor(player);
     }
 
-    private void equipAssassin(Player player, int level) {
-        ItemStack sword = new ItemStack(Material.GOLDEN_SWORD);
-        if (level >= 2)
-            sword.addEnchantment(Enchantment.SHARPNESS, 1);
-        if (level >= 3)
-            sword.addEnchantment(Enchantment.SHARPNESS, 2);
-        player.getInventory().setItem(0, sword);
-        int speedLevel = level - 1;
-        player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, speedLevel));
-        if (level >= 2)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.JUMP_BOOST, Integer.MAX_VALUE, 0));
-        if (level >= 3)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0));
+    private void equipAssassin(Player player, int tier) {
+        give(player, Material.GOLDEN_SWORD, 1);
+        if (tier >= 2) give(player, Material.ENDER_PEARL, 1);
+        setLeatherArmor(player);
+        permanent(player, PotionEffectType.SPEED, 0);
     }
 
-    private void equipMiner(Player player, int level) {
-        ItemStack pickaxe = new ItemStack(Material.STONE_PICKAXE);
-        if (level >= 2)
-            pickaxe = new ItemStack(Material.IRON_PICKAXE);
-        if (level >= 3) {
-            pickaxe = new ItemStack(Material.DIAMOND_PICKAXE);
-            pickaxe.addEnchantment(Enchantment.EFFICIENCY, 1);
-        }
-        player.getInventory().setItem(0, pickaxe);
-        player.getInventory().setItem(1, new ItemStack(Material.COBBLESTONE, 16 + (level * 16)));
-        if (level >= 2)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.HASTE, Integer.MAX_VALUE, 0));
-        if (level >= 3)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, Integer.MAX_VALUE, 0));
+    private void equipMiner(Player player, int tier) {
+        give(player, tier >= 3 ? Material.IRON_PICKAXE : Material.STONE_PICKAXE, 1,
+                Material.COBBLESTONE, 24 + tier * 8, Material.WOODEN_SWORD, 1);
+        setLeatherArmor(player);
+        permanent(player, PotionEffectType.HASTE, 0);
     }
 
-    private void equipVampire(Player player, int level) {
-        ItemStack sword = new ItemStack(Material.IRON_SWORD);
-        if (level >= 2)
-            sword.addEnchantment(Enchantment.SHARPNESS, 1);
-        player.getInventory().setItem(0, sword);
-        int lifeStealChance = 10 + (level * 10); // 20%, 30%, 40%
-        // Logic for lifesteal would be in KitEffectListener
-        if (level >= 3)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, Integer.MAX_VALUE, 0));
+    private void equipVampire(Player player, int tier) {
+        player.getInventory().addItem(namedItem(Material.STONE_SWORD, ChatColor.RED + "Vampiric Blade"));
+        setLeatherArmor(player);
+        if (tier >= 3) player.getInventory().setChestplate(new ItemStack(Material.CHAINMAIL_CHESTPLATE));
     }
 
-    private void equipFrostMage(Player player, int level) {
-        player.getInventory().setItem(0, new ItemStack(Material.STONE_SWORD));
-        player.getInventory().setItem(1, new ItemStack(Material.SNOWBALL, 16 + (level * 16)));
-        if (level >= 2)
-            player.getInventory().setItem(2, new ItemStack(Material.ICE, level * 8));
-        if (level >= 3)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 0));
+    private void equipFrostMage(Player player, int tier) {
+        give(player, Material.STONE_SWORD, 1);
+        ItemStack wand = namedItem(Material.STICK, ChatColor.AQUA + "Frost Wand");
+        ItemMeta meta = wand.getItemMeta();
+        meta.setLore(List.of(ChatColor.GRAY + "Right-click: temporary ice bridge",
+                ChatColor.GRAY + "and a short enemy slow."));
+        wand.setItemMeta(meta);
+        player.getInventory().addItem(wand, new ItemStack(Material.SNOWBALL, 4 + tier * 4));
+        setLeatherArmor(player);
     }
 
-    private void equipJuggernaut(Player player, int level) {
-        ItemStack axe = new ItemStack(Material.IRON_AXE);
-        if (level >= 2)
-            axe = new ItemStack(Material.DIAMOND_AXE);
-        if (level >= 3) {
-            axe = new ItemStack(Material.DIAMOND_AXE);
-            axe.addEnchantment(Enchantment.SHARPNESS, 1);
-        }
-        player.getInventory().setItem(0, axe);
-        if (level >= 1)
-            player.getInventory().setChestplate(new ItemStack(Material.IRON_CHESTPLATE));
-        if (level >= 2)
-            player.getInventory().setChestplate(new ItemStack(Material.DIAMOND_CHESTPLATE));
-        if (level >= 3) {
-            player.getInventory().setChestplate(new ItemStack(Material.DIAMOND_CHESTPLATE));
-            player.getInventory().setHelmet(new ItemStack(Material.DIAMOND_HELMET));
-        }
-        if (level >= 1)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, Integer.MAX_VALUE, 0));
-        if (level >= 3)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.STRENGTH, Integer.MAX_VALUE, 0));
+    private void equipJuggernaut(Player player, int tier) {
+        give(player, Material.STONE_AXE, 1);
+        setLeatherArmor(player);
+        player.getInventory().setItemInOffHand(new ItemStack(Material.SHIELD));
+        player.getInventory().setChestplate(new ItemStack(Material.CHAINMAIL_CHESTPLATE));
+        if (tier >= 2) player.getInventory().setHelmet(new ItemStack(Material.CHAINMAIL_HELMET));
+        if (tier >= 3) player.getInventory().setLeggings(new ItemStack(Material.CHAINMAIL_LEGGINGS));
+        permanent(player, PotionEffectType.SLOWNESS, tier >= 3 ? 1 : 0);
     }
 
-    private void equipTrapper(Player player, int level) {
-        player.getInventory().setItem(0, new ItemStack(Material.STONE_SWORD));
-        player.getInventory().setItem(1, new ItemStack(Material.TRIPWIRE_HOOK, 4 + (level * 4)));
-        player.getInventory().setItem(2, new ItemStack(Material.STRING, 8 + (level * 8)));
-        if (level >= 2)
-            player.getInventory().setItem(3, new ItemStack(Material.REDSTONE, level * 8));
-        if (level >= 3)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0));
+    private void equipTrapper(Player player, int tier) {
+        give(player, Material.STONE_SWORD, 1, Material.COBWEB, tier + 1,
+                Material.TRIPWIRE_HOOK, tier + 2, Material.STRING, 4 + tier * 2);
+        setLeatherArmor(player);
     }
 
-    private void equipAlchemist(Player player, int level) {
-        player.getInventory().setItem(0, new ItemStack(Material.STONE_SWORD));
-        player.getInventory().setItem(1, new ItemStack(Material.SPLASH_POTION, level * 2));
-        if (level >= 2)
-            player.getInventory().setItem(2, new ItemStack(Material.LINGERING_POTION, level));
-        if (level >= 3) {
-            player.getInventory().setItem(3, new ItemStack(Material.BREWING_STAND));
-            player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, Integer.MAX_VALUE, 0));
+    private void equipAlchemist(Player player, int tier) {
+        give(player, Material.WOODEN_SWORD, 1, Material.BREAD, tier);
+        player.getInventory().addItem(namedItem(Material.BREWING_STAND, ChatColor.LIGHT_PURPLE + "Field Brewery"));
+        setLeatherArmor(player);
+    }
+
+    private void equipKnockbackWarrior(Player player, int tier) {
+        ItemStack stick = namedItem(Material.STICK, "The Big Stick " + roman(tier));
+        stick.addUnsafeEnchantment(Enchantment.KNOCKBACK, 1);
+        player.getInventory().addItem(stick, new ItemStack(Material.WOODEN_SWORD),
+                new ItemStack(Material.SNOWBALL, tier * 4));
+        setLeatherArmor(player);
+        if (tier >= 3) player.getInventory().setChestplate(new ItemStack(Material.CHAINMAIL_CHESTPLATE));
+    }
+
+    private void equipMobility(Player player, int tier) {
+        give(player, Material.WOODEN_SWORD, 1, Material.FEATHER, tier + 2);
+        setLeatherArmor(player);
+        permanent(player, PotionEffectType.SPEED, 0);
+        if (tier >= 3) permanent(player, PotionEffectType.JUMP_BOOST, 0);
+    }
+
+    private void give(Player player, Object... materialAmountPairs) {
+        for (int index = 0; index < materialAmountPairs.length; index += 2) {
+            player.getInventory().addItem(new ItemStack((Material) materialAmountPairs[index],
+                    (Integer) materialAmountPairs[index + 1]));
         }
     }
 
-    private void equipKnockbackWarrior(Player player, int level) {
-        ItemStack kbStick = new ItemStack(Material.STICK);
-        int knockbackLevel = Math.min(2 + level, 3);
-        kbStick.addUnsafeEnchantment(Enchantment.KNOCKBACK, knockbackLevel);
-        ItemMeta meta = kbStick.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName(ChatColor.RESET + "The Big Stick " + getRomanNumeral(level));
-            kbStick.setItemMeta(meta);
-        }
-        player.getInventory().setItem(0, kbStick);
-        if (level >= 1) {
-            player.getInventory().setHelmet(new ItemStack(Material.CHAINMAIL_HELMET));
-            player.getInventory().setChestplate(new ItemStack(Material.IRON_CHESTPLATE));
-            player.getInventory().setLeggings(new ItemStack(Material.CHAINMAIL_LEGGINGS));
-            player.getInventory().setBoots(new ItemStack(Material.CHAINMAIL_BOOTS));
-        }
-        if (level >= 2) {
-            player.getInventory().setHelmet(new ItemStack(Material.IRON_HELMET));
-            player.getInventory().setLeggings(new ItemStack(Material.IRON_LEGGINGS));
-        }
-        if (level >= 3) {
-            player.getInventory().setHelmet(new ItemStack(Material.IRON_HELMET));
-            player.getInventory().setChestplate(new ItemStack(Material.DIAMOND_CHESTPLATE));
-            player.getInventory().setLeggings(new ItemStack(Material.IRON_LEGGINGS));
-            player.getInventory().setBoots(new ItemStack(Material.IRON_BOOTS));
-        }
-    }
-
-    private void equipMobility(Player player, int level) {
-        player.getInventory().setItem(0, new ItemStack(Material.IRON_SWORD));
-        player.getInventory().setItem(1, new ItemStack(Material.FEATHER, 2 + level));
-        player.getInventory().setItem(2, new ItemStack(Material.SUGAR, 1 + level));
+    private void setLeatherArmor(Player player) {
         player.getInventory().setHelmet(new ItemStack(Material.LEATHER_HELMET));
         player.getInventory().setChestplate(new ItemStack(Material.LEATHER_CHESTPLATE));
         player.getInventory().setLeggings(new ItemStack(Material.LEATHER_LEGGINGS));
         player.getInventory().setBoots(new ItemStack(Material.LEATHER_BOOTS));
-        int speedLevel = Math.min(level - 1, 1);
-        int jumpLevel = Math.min(level - 1, 1);
-        if (level >= 1)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, speedLevel));
-        if (level >= 2)
-            player.addPotionEffect(new PotionEffect(PotionEffectType.JUMP_BOOST, Integer.MAX_VALUE, jumpLevel));
-        if (level >= 3) {
-            player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 1));
-            player.addPotionEffect(new PotionEffect(PotionEffectType.JUMP_BOOST, Integer.MAX_VALUE, 1));
-        }
     }
 
-    private String getRomanNumeral(int number) {
-        switch (number) {
-            case 1:
-                return "I";
-            case 2:
-                return "II";
-            case 3:
-                return "III";
-            default:
-                return String.valueOf(number);
-        }
+    private void permanent(Player player, PotionEffectType type, int amplifier) {
+        player.addPotionEffect(new PotionEffect(type, Integer.MAX_VALUE, amplifier));
     }
 
-    // Original Kit Definitions
-    private void addOriginalKit(Kit kit) {
-        originalKits.put(kit.getName(), kit);
+    private ItemStack namedItem(Material material, String name) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(ChatColor.RESET + name);
+        item.setItemMeta(meta);
+        return item;
     }
 
-    private void createDefaultKit() {
-        Kit kit = new Kit("Default", 0, 0, true, "kit.default.description");
-        kit.addItem(Material.STONE_SWORD, 1);
-        kit.addItem(Material.BOW, 1);
-        kit.addItem(Material.GOLDEN_PICKAXE, 1);
-        kit.addItem(Material.ARROW, 24);
-        kit.addItem(Material.BREAD, 5);
-        kit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS,
-                Material.LEATHER_BOOTS);
-        addOriginalKit(kit);
+    private ItemStack createPotion(String name, PotionEffectType type, int duration) {
+        ItemStack potion = new ItemStack(Material.POTION);
+        PotionMeta meta = (PotionMeta) potion.getItemMeta();
+        meta.setDisplayName(ChatColor.RESET + name);
+        meta.addCustomEffect(new PotionEffect(type, duration, 0), true);
+        potion.setItemMeta(meta);
+        return potion;
     }
 
-    private void createExplosiveArcherKit() {
-        Kit kit = new Kit("Explosive Archer", 500, 7, false, "kit.explosive_archer.description");
-        kit.addItem(Material.BOW, 1, Enchantment.INFINITY, 1);
-        kit.addItem(Material.ARROW, 1);
-        kit.addItem(Material.TNT, 8);
-        kit.setArmor(Material.CHAINMAIL_HELMET, Material.CHAINMAIL_CHESTPLATE, Material.LEATHER_LEGGINGS,
-                Material.LEATHER_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createEndermanKit() {
-        Kit kit = new Kit("Enderman", 1000, 16, false, "kit.enderman.description");
-        kit.addItem(Material.ENDER_PEARL, 12);
-        kit.addItem(Material.IRON_SWORD, 1);
-        kit.setArmor(Material.IRON_HELMET, Material.LEATHER_CHESTPLATE, Material.IRON_LEGGINGS, Material.LEATHER_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createKnockbackWarriorKit() {
-        Kit kit = new Kit("Knockback Warrior", 300, 0, true, "kit.knockback_warrior.description");
-        ItemStack kbStick = new ItemStack(Material.STICK);
-        kbStick.addUnsafeEnchantment(Enchantment.KNOCKBACK, 5);
-        ItemMeta meta = kbStick.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName(ChatColor.RESET + "The Big Stick");
-            kbStick.setItemMeta(meta);
-        }
-        kit.addItemStack(kbStick, 1);
-        kit.setArmor(Material.CHAINMAIL_HELMET, Material.IRON_CHESTPLATE, Material.CHAINMAIL_LEGGINGS,
-                Material.CHAINMAIL_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createTankKit() {
-        Kit kit = new Kit("Tank", 900, 15, false, "kit.tank.description");
-        kit.addItem(Material.DIAMOND_SWORD, 1);
-        kit.addItem(Material.SHIELD, 1);
-        kit.addItem(Material.GOLDEN_APPLE, 3);
-        kit.setArmor(Material.DIAMOND_HELMET, Material.DIAMOND_CHESTPLATE, Material.DIAMOND_LEGGINGS,
-                Material.DIAMOND_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createNinjaKit() {
-        Kit kit = new Kit("Ninja", 1200, 22, false, "kit.ninja.description");
-        kit.addItem(Material.IRON_SWORD, 1, Enchantment.SHARPNESS, 1);
-        kit.addItem(Material.ENDER_PEARL, 5);
-        kit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS,
-                Material.LEATHER_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createArcherKit() {
-        Kit kit = new Kit("Archer", 500, 0, true, "kit.archer.description");
-        kit.addItem(Material.BOW, 1, Enchantment.POWER, 2);
-        kit.addItem(Material.ARROW, 32);
-        kit.addItem(Material.WOODEN_SWORD, 1);
-        kit.setArmor(Material.LEATHER_HELMET, Material.CHAINMAIL_CHESTPLATE, Material.LEATHER_LEGGINGS,
-                Material.LEATHER_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createBerserkerKit() {
-        Kit kit = new Kit("Berserker", 600, 8, false, "kit.berserker.description");
-        kit.addItem(Material.DIAMOND_AXE, 1, Enchantment.SHARPNESS, 2);
-        kit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS,
-                Material.LEATHER_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createChemistKit() {
-        Kit kit = new Kit("Chemist", 1100, 20, false, "kit.chemist.description");
-        kit.addItem(Material.STONE_SWORD, 1);
-        kit.setArmor(Material.CHAINMAIL_HELMET, Material.CHAINMAIL_CHESTPLATE, Material.CHAINMAIL_LEGGINGS,
-                Material.CHAINMAIL_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createAssassinKit() {
-        Kit kit = new Kit("Assassin", 1400, 28, false, "kit.assassin.description");
-        ItemStack dagger = new ItemStack(Material.GOLDEN_SWORD);
-        dagger.addUnsafeEnchantment(Enchantment.SHARPNESS, 3);
-        ItemMeta daggerMeta = dagger.getItemMeta();
-        if (daggerMeta != null) {
-            daggerMeta.setDisplayName(ChatColor.RESET + "Assassin's Dagger");
-            dagger.setItemMeta(daggerMeta);
-        }
-        kit.addItemStack(dagger, 1);
-        kit.addItem(Material.ENDER_PEARL, 3);
-        kit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS,
-                Material.LEATHER_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createMinerKit() {
-        Kit kit = new Kit("Miner", 300, 3, false, "kit.miner.description");
-        kit.addItem(Material.DIAMOND_PICKAXE, 1, Enchantment.EFFICIENCY, 2);
-        kit.addItem(Material.OAK_WOOD, 32);
-        kit.addItem(Material.COBBLESTONE, 64);
-        kit.setArmor(Material.IRON_HELMET, Material.IRON_CHESTPLATE, Material.IRON_LEGGINGS, Material.IRON_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createVampireKit() {
-        Kit kit = new Kit("Vampire", 900, 14, false, "kit.vampire.description");
-        ItemStack vampireSword = new ItemStack(Material.IRON_SWORD);
-        ItemMeta vampireMeta = vampireSword.getItemMeta();
-        if (vampireMeta != null) {
-            vampireMeta.setDisplayName(ChatColor.RESET + "" + ChatColor.RED + "Vampiric Blade");
-            vampireSword.setItemMeta(vampireMeta);
-        }
-        kit.addItemStack(vampireSword, 1);
-        kit.setArmor(Material.LEATHER_HELMET, Material.CHAINMAIL_CHESTPLATE, Material.LEATHER_LEGGINGS,
-                Material.LEATHER_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createFrostMageKit() {
-        Kit kit = new Kit("Frost Mage", 1300, 25, false, "kit.frost_mage.description");
-        ItemStack iceWand = new ItemStack(Material.STICK);
-        iceWand.addUnsafeEnchantment(Enchantment.KNOCKBACK, 1);
-        ItemMeta wandMeta = iceWand.getItemMeta();
-        if (wandMeta != null) {
-            wandMeta.setDisplayName(ChatColor.AQUA + "Frost Wand");
-            wandMeta.setLore(Collections.singletonList(ChatColor.GRAY + "Right-click to shoot a slowing snowball."));
-            iceWand.setItemMeta(wandMeta);
-        }
-        kit.addItemStack(iceWand, 1);
-        kit.addItem(Material.SNOWBALL, 32);
-        kit.setArmor(Material.CHAINMAIL_HELMET, Material.IRON_CHESTPLATE, Material.CHAINMAIL_LEGGINGS,
-                Material.IRON_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createJuggernautKit() {
-        Kit kit = new Kit("Juggernaut", 1600, 30, false, "kit.juggernaut.description");
-        kit.addItem(Material.NETHERITE_AXE, 1, Enchantment.SHARPNESS, 1);
-        kit.addItem(Material.SHIELD, 1);
-        kit.addItem(Material.ENCHANTED_GOLDEN_APPLE, 1);
-        kit.setArmor(Material.NETHERITE_HELMET, Material.NETHERITE_CHESTPLATE, Material.NETHERITE_LEGGINGS,
-                Material.NETHERITE_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createTrapperKit() {
-        Kit kit = new Kit("Trapper", 400, 5, false, "kit.trapper.description");
-        kit.addItem(Material.STONE_SWORD, 1);
-        kit.addItem(Material.TRIPWIRE_HOOK, 12);
-        kit.addItem(Material.STRING, 48);
-        kit.addItem(Material.TNT, 4);
-        kit.setArmor(Material.LEATHER_HELMET, Material.IRON_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.IRON_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createAlchemistKit() {
-        Kit kit = new Kit("Alchemist", 800, 12, false, "kit.alchemist.description");
-        kit.addItem(Material.IRON_SWORD, 1);
-        kit.addItem(Material.BREWING_STAND, 1);
-        kit.setArmor(Material.GOLDEN_HELMET, Material.GOLDEN_CHESTPLATE, Material.GOLDEN_LEGGINGS,
-                Material.GOLDEN_BOOTS);
-        addOriginalKit(kit);
-    }
-
-    private void createMobilityKit() {
-        Kit kit = new Kit("Mobility", 400, 4, false, "kit.mobility.description");
-        kit.addItem(Material.IRON_SWORD, 1);
-        kit.addItem(Material.FEATHER, 3);
-        kit.addItem(Material.SUGAR, 2);
-        kit.setArmor(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS,
-                Material.LEATHER_BOOTS);
-        addOriginalKit(kit);
+    private String roman(int value) {
+        return switch (value) {
+            case 1 -> "I";
+            case 2 -> "II";
+            case 3 -> "III";
+            default -> String.valueOf(value);
+        };
     }
 }

@@ -23,6 +23,13 @@ dependencies {
     compileOnly 'io.papermc.paper:paper-api:26.1.2.build.74-stable'
     compileOnly('org.geysermc.cumulus:cumulus:1.1.2')
     compileOnly "org.geysermc.floodgate:api:2.2.5-SNAPSHOT"
+    testImplementation platform('org.junit:junit-bom:5.12.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 def targetJavaVersion = 25

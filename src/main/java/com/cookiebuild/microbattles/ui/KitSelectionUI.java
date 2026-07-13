@@ -1,13 +1,14 @@
 package com.cookiebuild.microbattles.ui;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -15,376 +16,272 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 
+import com.cookiebuild.cookiedough.model.MinigameProgression;
 import com.cookiebuild.cookiedough.model.PlayerMatchPerformance;
 import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.cookiedough.service.PlayerStatsService;
-import com.cookiebuild.microbattles.kits.Kit;
+import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.kits.KitLevel;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.kits.TieredKit;
 import com.cookiebuild.microbattles.ui.bedrock.BedrockKitSelectionUI;
 import com.cookiebuild.microbattles.ui.bedrock.BedrockUIHelper;
 
-public class KitSelectionUI implements Listener {
-
+/** Paginated Java selector with stable item metadata and async snapshot loading. */
+public final class KitSelectionUI implements Listener {
+    private static final String TITLE_PREFIX = ChatColor.DARK_AQUA + "Kit Selection • ";
+    private static final int PAGE_SIZE = 36;
     private final KitManager kitManager;
-    private final MinigameProgressionService minigameStatsService;
-    private final PlayerStatsService playerStatsService;
     private final BedrockKitSelectionUI bedrockKitSelectionUI;
-    private static final String JAVA_GUI_TITLE = ChatColor.DARK_AQUA + "Kit Selection";
+    private final NamespacedKey kitNameKey;
+    private final NamespacedKey kitLevelKey;
+    private final NamespacedKey actionKey;
+    private final NamespacedKey pageKey;
 
-    public KitSelectionUI(KitManager kitManager, MinigameProgressionService minigameStatsService,
-            PlayerStatsService playerStatsService) {
+    public KitSelectionUI(KitManager kitManager, MinigameProgressionService ignoredService,
+            PlayerStatsService ignoredPlayerStatsService) {
         this.kitManager = kitManager;
-        this.minigameStatsService = minigameStatsService;
-        this.playerStatsService = playerStatsService;
-        this.bedrockKitSelectionUI = new BedrockKitSelectionUI(kitManager, minigameStatsService);
+        this.bedrockKitSelectionUI = new BedrockKitSelectionUI(kitManager, ignoredService);
+        this.kitNameKey = new NamespacedKey(MicroBattles.getInstance(), "kit_name");
+        this.kitLevelKey = new NamespacedKey(MicroBattles.getInstance(), "kit_level");
+        this.actionKey = new NamespacedKey(MicroBattles.getInstance(), "kit_action");
+        this.pageKey = new NamespacedKey(MicroBattles.getInstance(), "kit_page");
     }
 
     public void openKitSelectionGUI(Player player) {
+        openKitSelectionGUI(player, 0);
+    }
+
+    private void openKitSelectionGUI(Player player, int requestedPage) {
         if (BedrockUIHelper.isBedrockPlayer(player)) {
             bedrockKitSelectionUI.open(player);
             return;
         }
-
         UUID playerId = player.getUniqueId();
+        Bukkit.getScheduler().runTaskAsynchronously(MicroBattles.getInstance(), () -> {
+            try {
+                MenuSnapshot snapshot = loadSnapshot(playerId);
+                Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
+                    if (player.isOnline()) {
+                        render(player, snapshot, requestedPage);
+                    }
+                });
+            } catch (RuntimeException exception) {
+                MicroBattles.getInstance().getLogger().warning(
+                        "Could not load kit menu for " + playerId + ": " + exception.getMessage());
+                Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () ->
+                        player.sendMessage(ChatColor.RED + "The kit menu could not be loaded. Please try again."));
+            }
+        });
+    }
 
-        // Calculate stats from performances using static method for fresh data
-        List<PlayerMatchPerformance> performances = PlayerStatsService.getPlayerPerformancesStatic(playerId)
-                .stream()
-                .filter(p -> "MicroBattles".equals(p.getMatch().getGameType()))
-                .collect(Collectors.toList());
-
+    private MenuSnapshot loadSnapshot(UUID playerId) {
+        MinigameProgressionService service = new MinigameProgressionService(null);
+        MinigameProgression progression = service.getOrCreateStats(playerId, MinigameProgressionService.MICROBATTLES);
+        int coins = service.getCoins(playerId, MinigameProgressionService.MICROBATTLES);
+        List<PlayerMatchPerformance> performances = PlayerStatsService.getPlayerPerformancesStatic(playerId).stream()
+                .filter(performance -> "MicroBattles".equals(performance.getMatch().getGameType())).toList();
         int wins = (int) performances.stream()
-                .filter(p -> p.getMatch().getWinners().stream().anyMatch(w -> w.getId().equals(playerId))).count();
-        int losses = performances.size() - wins;
+                .filter(performance -> performance.getMatch().getWinners().stream()
+                        .anyMatch(winner -> winner.getId().equals(playerId)))
+                .count();
         int kills = performances.stream().mapToInt(PlayerMatchPerformance::getKillsInMatch).sum();
         int deaths = performances.stream().mapToInt(PlayerMatchPerformance::getDeathsInMatch).sum();
 
-        // Get progression stats using fresh EntityManager for updated data
-        com.cookiebuild.cookiedough.model.MinigameProgression progressionStats;
-        int playerLevel, playerCoins, playerXp, xpForNextLevel;
-
-        try (jakarta.persistence.EntityManager freshEM = com.cookiebuild.cookiedough.utils.HibernateUtil
-                .createEntityManager()) {
-            // Get fresh progression data
-            com.cookiebuild.cookiedough.model.MinigameProgressionId id = new com.cookiebuild.cookiedough.model.MinigameProgressionId(
-                    playerId, MinigameProgressionService.MICROBATTLES);
-            progressionStats = freshEM.find(com.cookiebuild.cookiedough.model.MinigameProgression.class, id);
-
-            if (progressionStats == null) {
-                progressionStats = new com.cookiebuild.cookiedough.model.MinigameProgression(playerId,
-                        MinigameProgressionService.MICROBATTLES);
-            }
-
-            playerLevel = progressionStats.getLevel();
-            playerXp = progressionStats.getExperience();
-            xpForNextLevel = progressionStats.getExperienceForNextLevel();
-
-            // Get fresh player coins
-            com.cookiebuild.cookiedough.model.PlayerData playerData = freshEM
-                    .find(com.cookiebuild.cookiedough.model.PlayerData.class, playerId);
-            playerCoins = playerData != null ? playerData.getCoins() : 0;
-        }
-
-        List<TieredKit> tieredKits = new ArrayList<>(kitManager.getAllTieredKits());
-        Kit defaultKit = kitManager.getOriginalKit("Default");
-
-        List<KitDisplayInfo> ownedKits = new ArrayList<>();
-        List<KitDisplayInfo> availableKits = new ArrayList<>();
-        List<KitDisplayInfo> lockedKits = new ArrayList<>();
-
-        if (defaultKit != null) {
-            ownedKits.add(new KitDisplayInfo(defaultKit.getName(), 0, true, true, true, defaultKit, player));
-        }
-
-        for (TieredKit tieredKit : tieredKits) {
-            for (KitLevel level : tieredKit.getLevels()) {
-                boolean previousLevelUnlocked = level.getLevel() == 1 || kitManager.isKitLevelUnlocked(
-                        minigameStatsService, playerId, tieredKit.getBaseName(), level.getLevel() - 1);
-                if (!previousLevelUnlocked) {
-                    continue;
-                }
-
-                boolean unlocked = kitManager.isKitLevelUnlocked(minigameStatsService, playerId,
-                        tieredKit.getBaseName(), level.getLevel());
-                boolean hasLevel = kitManager.hasRequiredPlayerLevelForKit(minigameStatsService, playerId,
-                        tieredKit.getBaseName(), level.getLevel());
-                boolean canAfford = kitManager.canAffordKitLevel(minigameStatsService, playerId,
-                        tieredKit.getBaseName(), level.getLevel());
-
-                KitDisplayInfo displayInfo = new KitDisplayInfo(tieredKit.getBaseName(), level.getLevel(), unlocked,
-                        hasLevel, canAfford, tieredKit, level, player);
-
-                if (unlocked) {
-                    ownedKits.add(displayInfo);
-                } else if (hasLevel && canAfford) {
-                    availableKits.add(displayInfo);
-                } else {
-                    lockedKits.add(displayInfo);
-                }
+        List<Entry> entries = new ArrayList<>();
+        entries.add(new Entry("Default", 0, true, true, true, true, 0, 0));
+        List<TieredKit> kits = kitManager.getAllTieredKits().stream()
+                .sorted(Comparator.comparing(TieredKit::getBaseName)).toList();
+        for (TieredKit kit : kits) {
+            for (KitLevel level : kit.getLevels()) {
+                boolean weekly = level.getLevel() == 1 && kitManager.isWeeklyFreeKit(kit.getBaseName());
+                boolean owned = level.isDefaultUnlocked() || weekly
+                        || progression.hasUnlockedKit(kit.getBaseName() + ":L" + level.getLevel());
+                boolean prerequisite = level.getLevel() == 1
+                        || progression.hasUnlockedKit(kit.getBaseName() + ":L" + (level.getLevel() - 1))
+                        || (level.getLevel() == 2 && weekly);
+                entries.add(new Entry(kit.getBaseName(), level.getLevel(), owned, weekly,
+                        progression.getLevel() >= level.getRequiredLevel(), prerequisite,
+                        level.getPrice(), level.getRequiredLevel()));
             }
         }
-
-        int totalSlots = ownedKits.size() + availableKits.size() + lockedKits.size() + 6;
-        int inventorySize = Math.max(27, (int) Math.ceil(totalSlots / 9.0) * 9);
-        Inventory gui = Bukkit.createInventory(null, inventorySize, JAVA_GUI_TITLE);
-
-        addPlayerInfoItems(gui, playerLevel, playerCoins, playerXp, xpForNextLevel, wins, losses, kills, deaths);
-
-        int currentSlot = 9;
-        if (!ownedKits.isEmpty()) {
-            addSectionHeader(gui, currentSlot, ChatColor.GREEN + "✓ Owned Kits", Material.EMERALD);
-            currentSlot++;
-            for (KitDisplayInfo kitInfo : ownedKits) {
-                addKitItem(gui, currentSlot++, kitInfo, player);
-            }
-            currentSlot++;
-        }
-        if (!availableKits.isEmpty()) {
-            addSectionHeader(gui, currentSlot, ChatColor.YELLOW + "$ Available for Purchase", Material.GOLD_INGOT);
-            currentSlot++;
-            for (KitDisplayInfo kitInfo : availableKits) {
-                addKitItem(gui, currentSlot++, kitInfo, player);
-            }
-            currentSlot++;
-        }
-        if (!lockedKits.isEmpty()) {
-            addSectionHeader(gui, currentSlot, ChatColor.RED + "✗ Locked Kits", Material.BARRIER);
-            currentSlot++;
-            for (KitDisplayInfo kitInfo : lockedKits) {
-                addKitItem(gui, currentSlot++, kitInfo, player);
-            }
-        }
-
-        player.openInventory(gui);
+        return new MenuSnapshot(progression.getLevel(), progression.getExperience(),
+                progression.getExperienceForNextLevel(), coins, wins, performances.size() - wins, kills, deaths,
+                kitManager.getWeeklyFreeKits(), List.copyOf(entries));
     }
 
-    private void addPlayerInfoItems(Inventory gui, int level, int coins, int xp, int xpForNextLevel, int wins,
-            int losses, int kills,
-            int deaths) {
-        ItemStack playerInfo = new ItemStack(Material.PLAYER_HEAD);
-        ItemMeta meta = playerInfo.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName(ChatColor.AQUA + "Your MicroBattles Stats");
-            List<String> lore = new ArrayList<>();
-            lore.add(ChatColor.YELLOW + "Level: " + level);
-            lore.add(ChatColor.GOLD + "Coins: " + coins);
-            lore.add(ChatColor.GREEN + "XP: " + xp + "/" + xpForNextLevel);
-            lore.add("");
-            lore.add(ChatColor.BLUE + "Wins: " + wins);
-            lore.add(ChatColor.RED + "Losses: " + losses);
-            lore.add(ChatColor.GREEN + "Kills: " + kills);
-            lore.add(ChatColor.DARK_RED + "Deaths: " + deaths);
-            double kdRatio = deaths > 0 ? (double) kills / deaths : kills;
-            lore.add(ChatColor.YELLOW + "K/D Ratio: " + String.format("%.2f", kdRatio));
-            double winRate = (wins + losses) > 0 ? (double) wins / (wins + losses) * 100 : 0;
-            lore.add(ChatColor.AQUA + "Win Rate: " + String.format("%.1f%%", winRate));
-            meta.setLore(lore);
-            playerInfo.setItemMeta(meta);
+    private void render(Player player, MenuSnapshot snapshot, int requestedPage) {
+        int pageCount = KitPagination.pageCount(snapshot.entries().size(), PAGE_SIZE);
+        int page = Math.max(0, Math.min(requestedPage, pageCount - 1));
+        Inventory inventory = Bukkit.createInventory(null, 54,
+                TITLE_PREFIX + (page + 1) + "/" + pageCount);
+        inventory.setItem(4, playerInfo(snapshot));
+        inventory.setItem(7, rotationInfo(snapshot.rotation()));
+
+        List<Entry> pageEntries = KitPagination.page(snapshot.entries(), page, PAGE_SIZE);
+        for (int index = 0; index < pageEntries.size(); index++) {
+            inventory.setItem(9 + index, kitItem(pageEntries.get(index), player));
         }
-        gui.setItem(4, playerInfo);
+        if (page > 0) inventory.setItem(45, actionItem(Material.ARROW, "Previous page", "previous", page - 1));
+        inventory.setItem(49, actionItem(Material.BARRIER, "Close", "close", page));
+        if (page + 1 < pageCount) inventory.setItem(53, actionItem(Material.ARROW, "Next page", "next", page + 1));
+        player.openInventory(inventory);
     }
 
-    private Material getKitMaterial(String kitName) {
-        switch (kitName) {
-            case "Default":
-                return Material.STONE_SWORD;
-            case "Archer":
-                return Material.BOW;
-            case "Miner":
-                return Material.DIAMOND_PICKAXE;
-            case "Trapper":
-                return Material.TRIPWIRE_HOOK;
-            case "Knockback Warrior":
-                return Material.STICK;
-            case "Berserker":
-                return Material.DIAMOND_AXE;
-            case "Explosive Archer":
-                return Material.TNT;
-            case "Alchemist":
-                return Material.BREWING_STAND;
-            case "Vampire":
-                return Material.IRON_SWORD;
-            case "Tank":
-                return Material.SHIELD;
-            case "Enderman":
-                return Material.ENDER_PEARL;
-            case "Ninja":
-                return Material.LEATHER_BOOTS;
-            case "Chemist":
-                return Material.SPLASH_POTION;
-            case "Frost Mage":
-                return Material.SNOWBALL;
-            case "Assassin":
-                return Material.GOLDEN_SWORD;
-            case "Juggernaut":
-                return Material.NETHERITE_AXE;
-            case "Mobility":
-                return Material.FEATHER;
-            default:
-                return Material.CHEST;
-        }
+    private ItemStack playerInfo(MenuSnapshot snapshot) {
+        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(ChatColor.AQUA + "Your MicroBattles Stats");
+        double kd = snapshot.deaths() == 0 ? snapshot.kills() : (double) snapshot.kills() / snapshot.deaths();
+        meta.setLore(List.of(
+                ChatColor.YELLOW + "Level: " + snapshot.level(),
+                ChatColor.GOLD + "Coins: " + snapshot.coins(),
+                ChatColor.GREEN + "XP: " + snapshot.experience() + "/" + snapshot.nextLevelExperience(),
+                ChatColor.BLUE + "Wins: " + snapshot.wins(),
+                ChatColor.RED + "Losses: " + snapshot.losses(),
+                ChatColor.GREEN + "Kills: " + snapshot.kills(),
+                ChatColor.DARK_RED + "Deaths: " + snapshot.deaths(),
+                ChatColor.YELLOW + String.format(java.util.Locale.ROOT, "K/D: %.2f", kd)));
+        item.setItemMeta(meta);
+        return item;
     }
 
-    private void addSectionHeader(Inventory gui, int slot, String title, Material material) {
-        if (slot >= gui.getSize())
-            return;
-        ItemStack header = new ItemStack(material);
-        ItemMeta meta = header.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName(title);
-            header.setItemMeta(meta);
-        }
-        gui.setItem(slot, header);
+    private ItemStack rotationInfo(List<String> rotation) {
+        ItemStack item = new ItemStack(Material.CLOCK);
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(ChatColor.GOLD + "Weekly Free Rotation");
+        List<String> lore = new ArrayList<>();
+        lore.add(ChatColor.GRAY + "Tier I is free to select this week:");
+        rotation.forEach(name -> lore.add(ChatColor.AQUA + "• " + name));
+        lore.add(ChatColor.DARK_GRAY + "Rotation changes every ISO week.");
+        meta.setLore(lore);
+        item.setItemMeta(meta);
+        return item;
     }
 
-    private void addKitItem(Inventory gui, int slot, KitDisplayInfo kitInfo, Player player) {
-        if (slot >= gui.getSize())
-            return;
+    private ItemStack kitItem(Entry entry, Player player) {
+        ItemStack item = new ItemStack(getKitMaterial(entry.name()));
+        ItemMeta meta = item.getItemMeta();
+        String display = entry.level() == 0 ? entry.name() : entry.name() + " " + roman(entry.level());
+        ChatColor color = entry.owned() ? ChatColor.GREEN
+                : entry.levelReady() && entry.prerequisiteReady() ? ChatColor.YELLOW : ChatColor.RED;
+        meta.setDisplayName(ChatColor.RESET + color.toString() + display);
+        List<String> lore = new ArrayList<>();
+        if (entry.weekly()) lore.add(ChatColor.GOLD + "★ Weekly free rotation");
+        else if (entry.owned()) lore.add(ChatColor.GREEN + "✓ Owned");
+        else lore.add(ChatColor.GOLD + "Price: " + entry.price() + " coins");
+        if (!entry.levelReady()) lore.add(ChatColor.RED + "Requires level " + entry.requiredLevel());
+        if (!entry.prerequisiteReady()) lore.add(ChatColor.RED + "Unlock the previous tier first");
+        lore.add("");
+        lore.add(ChatColor.GRAY + kitManager.getKitDescription(entry.name(), player));
+        lore.add("");
+        lore.add(entry.owned() ? ChatColor.GREEN + "Left-click to select"
+                : ChatColor.YELLOW + "Left-click to purchase");
+        if (entry.level() > 0) lore.add(ChatColor.AQUA + "Right-click to practice-preview");
+        meta.setLore(lore);
+        meta.getPersistentDataContainer().set(kitNameKey, PersistentDataType.STRING, entry.name());
+        meta.getPersistentDataContainer().set(kitLevelKey, PersistentDataType.INTEGER, entry.level());
+        item.setItemMeta(meta);
+        return item;
+    }
 
-        Material iconMaterial = getKitMaterial(kitInfo.kitName);
-
-        ItemStack kitItem = new ItemStack(iconMaterial);
-        ItemMeta meta = kitItem.getItemMeta();
-        if (meta != null) {
-            String nameColor = kitInfo.unlocked ? ChatColor.GREEN.toString()
-                    : (kitInfo.hasLevel && kitInfo.canAfford ? ChatColor.YELLOW.toString() : ChatColor.RED.toString());
-            String displayName = kitInfo.level == 0 ? kitInfo.kitName
-                    : kitInfo.kitLevel.getDisplayName(kitInfo.kitName);
-            meta.setDisplayName(ChatColor.RESET + nameColor + displayName);
-
-            List<String> lore = new ArrayList<>();
-            if (kitInfo.originalKit != null && kitInfo.originalKit.isDefaultUnlocked()) {
-                lore.add(ChatColor.YELLOW + "Default Kit");
-            } else if (kitInfo.unlocked) {
-                lore.add(ChatColor.GREEN + "✓ Owned");
-            } else {
-                if (!kitInfo.hasLevel || !kitInfo.canAfford) {
-                    lore.add(ChatColor.RED + "✗ Locked");
-                }
-                if (kitInfo.kitLevel != null) {
-                    lore.add(ChatColor.GOLD + "Price: " + kitInfo.kitLevel.getPrice() + " coins");
-                    if (kitInfo.kitLevel.getRequiredLevel() > 0) {
-                        lore.add(ChatColor.AQUA + "Required Level: " + kitInfo.kitLevel.getRequiredLevel());
-                    }
-                }
-            }
-            lore.add("");
-
-            String description = kitManager.getKitDescription(kitInfo.kitName, player);
-            if (description != null && !description.isEmpty()) {
-                lore.add(ChatColor.DARK_GRAY + "--------------------");
-                lore.add(ChatColor.GRAY + description);
-                lore.add(ChatColor.DARK_GRAY + "--------------------");
-                lore.add("");
-            }
-
-            if (kitInfo.unlocked) {
-                lore.add(ChatColor.GREEN + "Click to select!");
-            } else {
-                if (!kitInfo.hasLevel) {
-                    lore.add(ChatColor.RED + "Level "
-                            + (kitInfo.kitLevel != null ? kitInfo.kitLevel.getRequiredLevel() : "?") + " required");
-                } else if (!kitInfo.canAfford) {
-                    lore.add(ChatColor.RED + "Not enough coins");
-                } else {
-                    lore.add(ChatColor.YELLOW + "Click to purchase!");
-                }
-            }
-            meta.setLore(lore);
-            kitItem.setItemMeta(meta);
-        }
-        gui.setItem(slot, kitItem);
+    private ItemStack actionItem(Material material, String name, String action, int page) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(ChatColor.YELLOW + name);
+        meta.getPersistentDataContainer().set(actionKey, PersistentDataType.STRING, action);
+        meta.getPersistentDataContainer().set(pageKey, PersistentDataType.INTEGER, page);
+        item.setItemMeta(meta);
+        return item;
     }
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        if (!event.getView().getTitle().equals(JAVA_GUI_TITLE)) {
-            return;
-        }
+        if (!event.getView().getTitle().startsWith(TITLE_PREFIX)) return;
         event.setCancelled(true);
-
-        Player player = (Player) event.getWhoClicked();
-        ItemStack clickedItem = event.getCurrentItem();
-
-        if (clickedItem == null || clickedItem.getType() == Material.AIR || !clickedItem.hasItemMeta()) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        ItemStack clicked = event.getCurrentItem();
+        if (clicked == null || !clicked.hasItemMeta()) return;
+        ItemMeta meta = clicked.getItemMeta();
+        String action = meta.getPersistentDataContainer().get(actionKey, PersistentDataType.STRING);
+        if (action != null) {
+            if (action.equals("close")) player.closeInventory();
+            else openKitSelectionGUI(player,
+                    meta.getPersistentDataContainer().getOrDefault(pageKey, PersistentDataType.INTEGER, 0));
             return;
         }
-
-        if (clickedItem.getType() == Material.EMERALD || clickedItem.getType() == Material.GOLD_INGOT
-                || clickedItem.getType() == Material.BARRIER || clickedItem.getType() == Material.PLAYER_HEAD) {
-            return;
-        }
-
-        String displayName = ChatColor.stripColor(clickedItem.getItemMeta().getDisplayName());
-        UUID playerId = player.getUniqueId();
-
-        String kitName;
-        int level = 0;
-
-        String[] parts = displayName.split(" ");
-        if (parts.length > 1) {
-            String lastPart = parts[parts.length - 1];
-            level = parseRomanNumeral(lastPart);
-            if (level > 0) {
-                kitName = displayName.substring(0, displayName.lastIndexOf(" ")).trim();
-            } else {
-                kitName = displayName.trim();
+        String kitName = meta.getPersistentDataContainer().get(kitNameKey, PersistentDataType.STRING);
+        Integer level = meta.getPersistentDataContainer().get(kitLevelKey, PersistentDataType.INTEGER);
+        if (kitName == null || level == null) return;
+        if (event.isRightClick() && level > 0) {
+            player.closeInventory();
+            if (!kitManager.previewKit(player, kitName, level)) {
+                player.sendMessage(ChatColor.RED + "Kit preview is only available before your match starts.");
             }
-        } else {
-            kitName = displayName.trim();
+            return;
         }
-
-        if (kitName.equals("Default")) {
-            kitManager.selectKit(playerId, "Default", 0);
-            player.sendMessage(ChatColor.GREEN + "You selected the Default kit.");
+        if (level == 0) {
+            kitManager.selectKit(player.getUniqueId(), "Default", 0);
+            player.sendMessage(ChatColor.GREEN + "Selected Default.");
             player.closeInventory();
             return;
         }
-
-        if (kitManager.isKitLevelUnlocked(minigameStatsService, playerId, kitName, level)) {
-            kitManager.selectKit(playerId, kitName, level);
-            player.sendMessage(ChatColor.GREEN + "You selected " + displayName);
+        MinigameProgressionService service = new MinigameProgressionService(null);
+        if (kitManager.isKitLevelUnlocked(service, player.getUniqueId(), kitName, level)) {
+            kitManager.selectKit(player.getUniqueId(), kitName, level);
+            player.sendMessage(ChatColor.GREEN + "Selected " + kitName + " " + roman(level) + ".");
+            player.closeInventory();
+        } else if (kitManager.purchaseKitLevel(service, player.getUniqueId(), kitName, level)) {
+            kitManager.selectKit(player.getUniqueId(), kitName, level);
+            player.sendMessage(ChatColor.GREEN + "Purchased and selected " + kitName + " " + roman(level) + ".");
             player.closeInventory();
         } else {
-            boolean hasLevel = kitManager.hasRequiredPlayerLevelForKit(minigameStatsService, playerId, kitName, level);
-            boolean canAfford = kitManager.canAffordKitLevel(minigameStatsService, playerId, kitName, level);
-
-            if (hasLevel && canAfford) {
-                boolean purchaseSuccess = kitManager.purchaseKitLevel(minigameStatsService, playerId, kitName, level);
-                if (purchaseSuccess) {
-                    player.sendMessage(ChatColor.GREEN + "Successfully purchased and selected " + displayName);
-                    player.closeInventory();
-                    openKitSelectionGUI(player); // Refresh
-                } else {
-                    player.sendMessage(ChatColor.RED + "An error occurred during purchase.");
-                }
-            } else if (!kitManager.hasRequiredPlayerLevelForKit(minigameStatsService, playerId, kitName, level)) {
-                KitLevel kitLevel = kitManager.getKitLevel(kitName, level);
-                if (kitLevel == null) {
-                    player.sendMessage(ChatColor.RED + "This kit level is no longer available.");
-                } else {
-                    player.sendMessage(ChatColor.RED + "You need to be level " + kitLevel.getRequiredLevel()
-                            + " to purchase this.");
-                }
-            } else {
-                player.sendMessage(ChatColor.RED + "You don't have enough coins.");
-            }
+            player.sendMessage(ChatColor.RED + "Purchase failed: check your coins, level and previous tier.");
+            openKitSelectionGUI(player, currentPage(event.getView().getTitle()));
         }
     }
 
-    private int parseRomanNumeral(String roman) {
-        switch (roman) {
-            case "I":
-                return 1;
-            case "II":
-                return 2;
-            case "III":
-                return 3;
-            default:
-                return 0;
+    private int currentPage(String title) {
+        try {
+            String suffix = title.substring(TITLE_PREFIX.length());
+            return Math.max(0, Integer.parseInt(suffix.split("/", 2)[0]) - 1);
+        } catch (RuntimeException ignored) {
+            return 0;
         }
     }
+
+    private Material getKitMaterial(String name) {
+        return switch (name) {
+            case "Default" -> Material.STONE_SWORD;
+            case "Archer" -> Material.BOW;
+            case "Miner" -> Material.IRON_PICKAXE;
+            case "Trapper" -> Material.COBWEB;
+            case "Knockback Warrior" -> Material.STICK;
+            case "Berserker" -> Material.STONE_AXE;
+            case "Explosive Archer" -> Material.TNT;
+            case "Alchemist" -> Material.BREWING_STAND;
+            case "Vampire" -> Material.REDSTONE;
+            case "Tank" -> Material.SHIELD;
+            case "Enderman" -> Material.ENDER_PEARL;
+            case "Ninja" -> Material.LEATHER_BOOTS;
+            case "Chemist" -> Material.POTION;
+            case "Frost Mage" -> Material.SNOWBALL;
+            case "Assassin" -> Material.GOLDEN_SWORD;
+            case "Juggernaut" -> Material.CHAINMAIL_CHESTPLATE;
+            case "Mobility" -> Material.FEATHER;
+            default -> Material.CHEST;
+        };
+    }
+
+    private String roman(int level) {
+        return switch (level) { case 1 -> "I"; case 2 -> "II"; case 3 -> "III"; default -> ""; };
+    }
+
+    private record Entry(String name, int level, boolean owned, boolean weekly, boolean levelReady,
+            boolean prerequisiteReady, int price, int requiredLevel) { }
+
+    private record MenuSnapshot(int level, int experience, int nextLevelExperience, int coins, int wins,
+            int losses, int kills, int deaths, List<String> rotation, List<Entry> entries) { }
 }

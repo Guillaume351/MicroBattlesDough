@@ -7,6 +7,7 @@ import com.cookiebuild.cookiedough.game.GameManager;
 import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.cookiedough.service.PlayerStatsService;
 import com.cookiebuild.microbattles.commands.KitCommand;
+import com.cookiebuild.microbattles.commands.MapVoteCommand;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.listener.InGamePlayerEventListener;
@@ -55,6 +56,9 @@ public class MicroBattles extends JavaPlugin {
 
         // Register Commands
         getCommand("kit").setExecutor(new KitCommand(kitSelectorListener));
+        MapVoteCommand mapVoteCommand = new MapVoteCommand();
+        getCommand("mbvote").setExecutor(mapVoteCommand);
+        getCommand("mbvote").setTabCompleter(mapVoteCommand);
     }
 
     @Override

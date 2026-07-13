@@ -7,7 +7,10 @@ depend: [ CookieDough ]
 
 commands:
   kit:
-    description: Ouvre l'interface de sélection des kits
-    usage: /kit
+    description: Open the kit selector or preview a kit before the match
+    usage: /kit [preview <1-3> <kit name>]
     permission: microbattles.kit
     permission-message: Vous n'avez pas la permission d'utiliser cette commande.
+  mbvote:
+    description: Vote for the next MicroBattles arena
+    usage: /mbvote [map]

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import org.bukkit.GameMode;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
@@ -16,6 +17,9 @@ import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.attribute.Attribute;
 
 import com.cookiebuild.cookiedough.game.Game;
 import com.cookiebuild.cookiedough.game.GameManager;
@@ -25,6 +29,7 @@ import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.player.PlayerState;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
+import com.cookiebuild.microbattles.map.MapManager;
 
 public class InGamePlayerEventListener extends BaseEventBlocker {
 
@@ -87,16 +92,24 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
         }
 
         if (event instanceof EntityDamageByEntityEvent damageByEntityEvent) {
-            if (damageByEntityEvent.getDamager() instanceof Player damager) {
+            Player damager = null;
+            if (damageByEntityEvent.getDamager() instanceof Player directDamager) {
+                damager = directDamager;
+            } else if (damageByEntityEvent.getDamager() instanceof Projectile projectile
+                    && projectile.getShooter() instanceof Player shooter) {
+                damager = shooter;
+            }
+            if (damager != null) {
                 CookiePlayer damagerCookiePlayer = PlayerManager.getPlayer(damager);
-
-                if(damager.getGameMode() != GameMode.SPECTATOR &&
-                        !microBattlesGame.arePlayersInSameTeam(cookiePlayer, damagerCookiePlayer)) {
-                    cookiePlayer.getPlayer().setKiller(damager);
-                    return true;
-                }else {
+                Game damagerGame = GameManager.getGameOfPlayer(damagerCookiePlayer);
+                if (damagerCookiePlayer == null || damagerGame != microBattlesGame
+                        || damager.getGameMode() == GameMode.SPECTATOR
+                        || microBattlesGame.arePlayersInSameTeam(cookiePlayer, damagerCookiePlayer)) {
                     return false;
                 }
+                cookiePlayer.getPlayer().setKiller(damager);
+                microBattlesGame.recordDamage(cookiePlayer, damagerCookiePlayer);
+                return true;
             }
         }
 
@@ -145,6 +158,11 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
 
         if (game instanceof MicroBattlesGame microBattlesGame && isGameRunning(player)) {
             event.setCancelled(true); // Prevent default death behavior
+            event.getDrops().clear();
+            event.setDroppedExp(0);
+            event.deathMessage(null);
+            var maxHealth = player.getAttribute(Attribute.MAX_HEALTH);
+            player.setHealth(maxHealth == null ? 20.0 : maxHealth.getValue());
 
             // Check if the player was killed by another player
             Player killer = player.getKiller();
@@ -157,6 +175,29 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
             }
 
             microBattlesGame.handlePlayerDeath(cookiePlayer, PlayerManager.getPlayer(killer));
+        }
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        MapManager.removeNextMapVote(event.getPlayer().getUniqueId());
+        removeFromMicroBattles(event.getPlayer());
+    }
+
+    /** Core lobby handling only removes IN_GAME players, so spectators leave here first. */
+    @EventHandler
+    public void onLobbyCommand(PlayerCommandPreprocessEvent event) {
+        String command = event.getMessage().trim().toLowerCase(java.util.Locale.ROOT);
+        if (command.equals("/lobby") || command.startsWith("/lobby ")) {
+            removeFromMicroBattles(event.getPlayer());
+        }
+    }
+
+    private void removeFromMicroBattles(Player player) {
+        CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
+        Game game = GameManager.getGameOfPlayer(cookiePlayer);
+        if (game instanceof MicroBattlesGame microBattlesGame) {
+            microBattlesGame.removePlayer(cookiePlayer);
         }
     }
 

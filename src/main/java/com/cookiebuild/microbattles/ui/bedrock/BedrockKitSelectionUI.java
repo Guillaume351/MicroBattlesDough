@@ -28,7 +28,8 @@ public class BedrockKitSelectionUI {
 
     public BedrockKitSelectionUI(KitManager kitManager, MinigameProgressionService minigameStatsService) {
         this.kitManager = kitManager;
-        this.minigameStatsService = minigameStatsService;
+        // Core operations are transaction-scoped; never retain a caller-owned persistence context.
+        this.minigameStatsService = new MinigameProgressionService(null);
     }
 
     public void open(Player player) {
@@ -40,9 +41,9 @@ public class BedrockKitSelectionUI {
                 .getOrCreateStats(playerId, MinigameProgressionService.MICROBATTLES);
         int playerXp = progressionStats.getExperience();
         int xpForNextLevel = progressionStats.getExperienceForNextLevel();
-        String statsContent = String.format("§9§lLevel: §f§l%d\n§6§lCoins: §f§l%d\n§a§lXP: §f§l%d/%d", playerLevel,
+        String statsContent = String.format("§9§lLevel: §f§l%d\n§6§lCoins: §f§l%d\n§a§lXP: §f§l%d/%d\n\n§6Weekly free: §b%s", playerLevel,
                 playerCoins,
-                playerXp, xpForNextLevel);
+                playerXp, xpForNextLevel, String.join(" §7/ §b", kitManager.getWeeklyFreeKits()));
 
         // --- Get and Filter Kits ---
         List<KitDisplayInfo> allKits = getKitDisplayInfos(player);
@@ -159,7 +160,8 @@ public class BedrockKitSelectionUI {
 
     private String createOwnedKitButtonText(KitDisplayInfo kit) {
         String displayName = kit.level == 0 ? kit.kitName : kit.kitLevel.getDisplayName(kit.kitName);
-        return "§a§l✓ §r§f§l" + displayName;
+        String rotation = kit.level == 1 && kitManager.isWeeklyFreeKit(kit.kitName) ? " §6★" : "";
+        return "§a§l✓ §r§f§l" + displayName + rotation;
     }
 
     private String createShopKitButtonText(KitDisplayInfo kit) {
@@ -174,57 +176,79 @@ public class BedrockKitSelectionUI {
     }
 
     private void handleKitSelection(Player player, KitDisplayInfo kitInfo) {
-        // For owned kits - just select them
-        kitManager.selectKit(player.getUniqueId(), kitInfo.kitName, kitInfo.level);
-        player.sendMessage(ChatColor.GREEN + "Selected kit: "
-                + (kitInfo.level == 0 ? kitInfo.kitName : kitInfo.kitLevel.getDisplayName(kitInfo.kitName)));
-        player.closeInventory(); // Close the form
+        String displayName = kitInfo.level == 0 ? kitInfo.kitName
+                : kitInfo.kitLevel.getDisplayName(kitInfo.kitName);
+        if (kitInfo.level == 0) {
+            kitManager.selectKit(player.getUniqueId(), kitInfo.kitName, kitInfo.level);
+            player.sendMessage(ChatColor.GREEN + "Selected kit: " + displayName);
+            return;
+        }
+        ModalForm form = ModalForm.builder()
+                .title("§l§9" + displayName)
+                .content(kitManager.getKitDescription(kitInfo.kitName, player)
+                        + "\n\nSelect it, or practice-preview it for 8 seconds before the match.")
+                .button1("§a§lSelect")
+                .button2("§b§lPreview")
+                .validResultHandler(response -> {
+                    if (response.getClickedButtonId() == 0) {
+                        kitManager.selectKit(player.getUniqueId(), kitInfo.kitName, kitInfo.level);
+                        player.sendMessage(ChatColor.GREEN + "Selected kit: " + displayName);
+                    } else if (!kitManager.previewKit(player, kitInfo.kitName, kitInfo.level)) {
+                        player.sendMessage(ChatColor.RED + "Preview is only available before the match starts.");
+                    }
+                }).build();
+        sendForm(player, form);
     }
 
     private void handleShopKitSelection(Player player, KitDisplayInfo kitInfo) {
-        if (kitInfo.hasLevel && kitInfo.canAfford) {
-            openPurchaseConfirmationForm(player, kitInfo);
-        } else {
-            String reason = !kitInfo.hasLevel
-                    ? "You need to reach level " + kitInfo.kitLevel.getRequiredLevel() + " first!"
-                    : "You don't have enough coins!";
-            player.sendMessage(ChatColor.RED + reason);
-            openShopMenu(player);
-        }
+        openPurchaseConfirmationForm(player, kitInfo);
     }
 
     private void openPurchaseConfirmationForm(Player player, KitDisplayInfo kitInfo) {
-        String title = "§l§eConfirm Purchase";
-        String content = String.format("Purchase §e§l%s §r§f§lfor §6§l%d coins§r§f§l?",
-                kitInfo.kitLevel.getDisplayName(kitInfo.kitName), kitInfo.kitLevel.getPrice());
-
-        ModalForm form = ModalForm.builder()
-                .title(title)
-                .content(content)
-                .button1("§a§lConfirm")
-                .button2("§c§lCancel")
-                .validResultHandler(response -> {
-                    if (response.getClickedButtonId() == 0) {
+        boolean purchasable = kitInfo.hasLevel && kitInfo.canAfford;
+        List<String> actions = new ArrayList<>();
+        SimpleForm.Builder builder = SimpleForm.builder()
+                .title("§l§e" + kitInfo.kitLevel.getDisplayName(kitInfo.kitName))
+                .content(kitManager.getKitDescription(kitInfo.kitName, player) + "\n\n§6Price: §f"
+                        + kitInfo.kitLevel.getPrice() + " coins"
+                        + (purchasable ? "" : "\n§cPurchase requirements are not met."));
+        if (purchasable) {
+            builder.button("§a§lPurchase and Select");
+            actions.add("purchase");
+        }
+        builder.button("§b§lPractice Preview (8s)");
+        actions.add("preview");
+        builder.button("§f§lBack");
+        actions.add("back");
+        builder.validResultHandler(response -> {
+                    String action = actions.get(response.getClickedButtonId());
+                    if (action.equals("purchase")) {
                         boolean success = kitManager.purchaseKitLevel(minigameStatsService, player.getUniqueId(),
                                 kitInfo.kitName, kitInfo.level);
                         if (success) {
-                            player.sendMessage(ChatColor.GREEN + "Purchase successful!");
-                            // Auto-select the newly purchased kit
                             kitManager.selectKit(player.getUniqueId(), kitInfo.kitName, kitInfo.level);
-                            player.sendMessage(ChatColor.GREEN + "Kit equipped: "
+                            player.sendMessage(ChatColor.GREEN + "Purchased and selected: "
                                     + kitInfo.kitLevel.getDisplayName(kitInfo.kitName));
                         } else {
-                            player.sendMessage(ChatColor.RED + "Purchase failed. Please try again.");
+                            player.sendMessage(ChatColor.RED + "Purchase failed. Check your coins and level.");
                         }
+                        openShopMenu(player);
+                    } else if (action.equals("preview")) {
+                        if (!kitManager.previewKit(player, kitInfo.kitName, kitInfo.level)) {
+                            player.sendMessage(ChatColor.RED + "Preview is only available before the match starts.");
+                        }
+                    } else {
+                        openShopMenu(player);
                     }
-                    openShopMenu(player); // Return to shop
-                })
-                .build();
-        sendForm(player, form);
+                });
+        sendForm(player, builder);
     }
 
     private List<KitDisplayInfo> getKitDisplayInfos(Player player) {
         UUID playerId = player.getUniqueId();
+        var progression = minigameStatsService.getOrCreateStats(playerId,
+                MinigameProgressionService.MICROBATTLES);
+        int coins = minigameStatsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES);
         List<KitDisplayInfo> kits = new ArrayList<>();
         Kit defaultKit = kitManager.getOriginalKit("Default");
 
@@ -235,20 +259,20 @@ public class BedrockKitSelectionUI {
         for (TieredKit tieredKit : kitManager.getAllTieredKits()) {
             for (KitLevel level : tieredKit.getLevels()) {
                 // *** FIX: Only show level if previous level is unlocked ***
+                boolean weeklyTierOne = level.getLevel() == 1
+                        && kitManager.isWeeklyFreeKit(tieredKit.getBaseName());
                 boolean previousLevelUnlocked = level.getLevel() == 1
-                        || kitManager.isKitLevelUnlocked(minigameStatsService, playerId, tieredKit.getBaseName(),
-                                level.getLevel() - 1);
+                        || progression.hasUnlockedKit(tieredKit.getBaseName() + ":L" + (level.getLevel() - 1))
+                        || (level.getLevel() == 2 && kitManager.isWeeklyFreeKit(tieredKit.getBaseName()));
 
                 if (!previousLevelUnlocked) {
                     continue;
                 }
 
-                boolean isUnlocked = kitManager.isKitLevelUnlocked(minigameStatsService, playerId,
-                        tieredKit.getBaseName(), level.getLevel());
-                boolean hasLevel = kitManager.hasRequiredPlayerLevelForKit(minigameStatsService, playerId,
-                        tieredKit.getBaseName(), level.getLevel());
-                boolean canAfford = kitManager.canAffordKitLevel(minigameStatsService, playerId,
-                        tieredKit.getBaseName(), level.getLevel());
+                boolean isUnlocked = level.isDefaultUnlocked() || weeklyTierOne
+                        || progression.hasUnlockedKit(tieredKit.getBaseName() + ":L" + level.getLevel());
+                boolean hasLevel = progression.getLevel() >= level.getRequiredLevel();
+                boolean canAfford = coins >= level.getPrice();
                 kits.add(new KitDisplayInfo(tieredKit.getBaseName(), level.getLevel(), isUnlocked, hasLevel, canAfford,
                         tieredKit, level, player));
             }
