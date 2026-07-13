@@ -1,7 +1,6 @@
 package com.cookiebuild.microbattles.map;
 
 import com.cookiebuild.cookiedough.CookieDough;
-import com.cookiebuild.cookiedough.utils.FileUtils;
 import com.cookiebuild.cookiedough.utils.ZipUtils;
 import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.listener.InGamePlayerEventListener;
@@ -59,9 +58,6 @@ public class MapManager {
             throw new IOException("Unzipped world folder does not exist: " + gameMapDir.getAbsolutePath());
         }
 
-        String worldName = gameUUID.toString();
-        ZipUtils.unzip(zippedMap, gameMapDir);
-
         World world = new WorldCreator(gameMapDir.getPath())
                 .environment(World.Environment.NORMAL)
                 .generateStructures(false)
@@ -69,7 +65,7 @@ public class MapManager {
                 .createWorld();
 
         if (world == null) {
-            throw new IOException("Failed to create world: " + worldName);
+            throw new IOException("Failed to create world: " + gameMapDir.getPath());
         }
 
         CookieDough.getInstance().getLogger().info("Created world " + world.getName() + " base on map " + mapName);
@@ -77,10 +73,6 @@ public class MapManager {
         world.setThundering(false);
 
         world.setGameRuleValue("announceAdvancements", "false");
-
-        // Copy map data to the newly created world
-        File worldFolder = world.getWorldFolder();
-        FileUtils.copyDirectory(gameMapDir, worldFolder);
 
         // Recreate the game map with the world loaded
         map = new GameMap("game_maps/" + gameUUID);

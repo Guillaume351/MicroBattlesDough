@@ -104,7 +104,7 @@ public class KitEffectListener implements Listener {
                     if (strengthLevel == 1) {
                         attacker.sendMessage(
                                 ChatColor.RED + LocaleManager.getMessage("kit.berserker.rage", attacker.locale()));
-                        attacker.getWorld().playSound(attacker.getLocation(), Sound.ENTITY_WOLF_HOWL, 1.0f, 0.8f);
+                        attacker.getWorld().playSound(attacker.getLocation(), Sound.ENTITY_WOLF_AMBIENT, 1.0f, 0.8f);
                     }
                 }
                 break;
