@@ -8,7 +8,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.logging.Level;
 import java.util.stream.Collectors;
 
 import org.bukkit.Bukkit;
@@ -86,19 +85,15 @@ public class MicroBattlesGame extends Game {
         this.scoreboardManager = new MicroBattlesScoreboardManager();
         this.matchService = new MatchService(null);
 
-        Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
-            try {
-                String randomMapName = MapManager.getRandomMapName();
-                map = MapManager.loadMapForGame(this.getGameId(), randomMapName);
-                this.wallCoordinates = MapManager.getWallCoordinatesForMap(randomMapName);
-                map.identifyWallBlocks(wallCoordinates);
-            } catch (IOException | RuntimeException e) {
-                MicroBattles.getInstance().getLogger().log(Level.SEVERE,
-                        "Failed to load map for MicroBattlesGame: " + e.getMessage(), e);
-                cleanupMap();
-                GameManager.removeGame(this);
-            }
-        });
+        try {
+            String randomMapName = MapManager.getRandomMapName();
+            map = MapManager.loadMapForGame(this.getGameId(), randomMapName);
+            this.wallCoordinates = MapManager.getWallCoordinatesForMap(randomMapName);
+            map.identifyWallBlocks(wallCoordinates);
+        } catch (IOException | RuntimeException error) {
+            cleanupMap();
+            throw new IllegalStateException("MicroBattles map preparation failed: " + error.getMessage(), error);
+        }
     }
 
     public void setupTeams() {
@@ -678,7 +673,9 @@ public class MicroBattlesGame extends Game {
 
     @Override
     public void registerANewGame() {
-        GameManager.addGame(new MicroBattlesGame());
+        // Constructing a MicroBattlesGame synchronously loads a world and used
+        // to freeze the queue for roughly three seconds. Only promote here.
+        MicroBattles.activateNextGame();
     }
 
     public int getTeamNumber(CookiePlayer player) {
@@ -868,5 +865,6 @@ public class MicroBattlesGame extends Game {
         scoreboardManager.clear();
         cleanupMap();
         GameManager.removeGame(this);
+        MicroBattles.requestStandbyRefill();
     }
 }

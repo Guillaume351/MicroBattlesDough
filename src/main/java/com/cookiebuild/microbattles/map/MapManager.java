@@ -14,6 +14,7 @@ import org.bukkit.WorldCreator;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.generator.ChunkGenerator;
 import net.kyori.adventure.util.TriState;
+import io.papermc.paper.math.Position;
 
 import java.io.File;
 import java.io.IOException;
@@ -71,13 +72,26 @@ public class MapManager {
         Files.deleteIfExists(gameMapDir.toPath().resolve("uid.dat"));
         Files.deleteIfExists(gameMapDir.toPath().resolve("session.lock"));
 
+        int sanitizedBlockEntities = AnvilBlockEntitySanitizer.sanitizeKnownMap(mapName, gameMapDir.toPath());
+        if (sanitizedBlockEntities > 0) {
+            MicroBattles.getInstance().getLogger().warning("Removed " + sanitizedBlockEntities
+                    + " orphaned block entities from extracted map " + mapName);
+        }
+
         if (!gameMapDir.isDirectory()) {
             throw new IOException("Unzipped world folder does not exist: " + gameMapDir.getAbsolutePath());
         }
 
+        Location forcedSpawn = getTeamSpawnsForMap(mapName, null).getFirst();
         World world = WorldCreator.ofKey(worldKey)
                 .environment(World.Environment.NORMAL)
                 .generateStructures(false)
+                // Some legacy maps have stale/missing spawn metadata. Supplying
+                // a validated team spawn prevents Paper's synchronous spawn
+                // search during world creation.
+                .forcedSpawnPosition(Position.block(
+                        forcedSpawn.getBlockX(), forcedSpawn.getBlockY(), forcedSpawn.getBlockZ()),
+                        forcedSpawn.getYaw(), forcedSpawn.getPitch())
                 // Match arenas load their exact team-spawn chunks before teleporting.
                 // Preparing Paper's generic spawn area here blocks the server thread for
                 // several seconds every time the standby game is replaced.

@@ -17,8 +17,16 @@ repositories {
     }
 }
 
+configurations {
+    embeddedNbt {
+        transitive = false
+    }
+}
+
 dependencies {
     implementation project(path: ':CookieDough', configuration: 'shadow')
+    implementation 'net.kyori:adventure-nbt:4.26.1'
+    embeddedNbt 'net.kyori:adventure-nbt:4.26.1'
     compileOnly 'jakarta.persistence:jakarta.persistence-api:3.2.0'
     compileOnly 'io.papermc.paper:paper-api:26.1.2.build.74-stable'
     compileOnly('org.geysermc.cumulus:cumulus:1.1.2')
@@ -27,6 +35,14 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'io.papermc.paper:paper-api:26.1.2.build.74-stable'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from {
+        configurations.embeddedNbt.collect { zipTree(it) }
+    }
+    exclude 'META-INF/MANIFEST.MF'
 }
 
 test {
