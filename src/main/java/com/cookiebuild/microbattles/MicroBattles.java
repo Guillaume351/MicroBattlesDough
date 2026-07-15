@@ -13,6 +13,7 @@ import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.listener.InGamePlayerEventListener;
 import com.cookiebuild.microbattles.listener.KitEffectListener;
 import com.cookiebuild.microbattles.listener.KitSelectorListener;
+import com.cookiebuild.microbattles.listener.MatchChunkIntegrityListener;
 import com.cookiebuild.microbattles.map.MapManager;
 
 public class MicroBattles extends JavaPlugin {
@@ -35,6 +36,9 @@ public class MicroBattles extends JavaPlugin {
         InGamePlayerEventListener inGamePlayerEventListener = new InGamePlayerEventListener();
         MapManager.inGamePlayerEventListener = inGamePlayerEventListener;
         MapManager.loadGameMaps();
+
+        // Sanitize legacy chunks before a match world can be exposed to a client.
+        getServer().getPluginManager().registerEvents(new MatchChunkIntegrityListener(), this);
 
         // Register a new game instance
         MicroBattles.registerNewGame();
