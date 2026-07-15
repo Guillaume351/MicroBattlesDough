@@ -13,6 +13,7 @@ import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.generator.ChunkGenerator;
+import net.kyori.adventure.util.TriState;
 
 import java.io.File;
 import java.io.IOException;
@@ -77,6 +78,10 @@ public class MapManager {
         World world = WorldCreator.ofKey(worldKey)
                 .environment(World.Environment.NORMAL)
                 .generateStructures(false)
+                // Match arenas load their exact team-spawn chunks before teleporting.
+                // Preparing Paper's generic spawn area here blocks the server thread for
+                // several seconds every time the standby game is replaced.
+                .keepSpawnLoaded(TriState.FALSE)
                 .generator(new VoidChunkGenerator())
                 .createWorld();
 
