@@ -4,6 +4,7 @@ import java.time.Duration;
 
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.Bukkit;
+import org.bukkit.NamespacedKey;
 
 import com.cookiebuild.cookiedough.CookieDough;
 import com.cookiebuild.cookiedough.game.GameManager;
@@ -31,9 +32,14 @@ public class MicroBattles extends JavaPlugin {
             new StandbyRefillGate(Duration.ofSeconds(30));
     private boolean standbyRefillScheduled;
     private boolean shuttingDown;
+    private NamespacedKey kitSelectorKey;
 
     public static MicroBattles getInstance() {
         return instance;
+    }
+
+    public NamespacedKey getKitSelectorKey() {
+        return kitSelectorKey;
     }
 
     public static boolean registerNewGame() {
@@ -135,6 +141,7 @@ public class MicroBattles extends JavaPlugin {
     @Override
     public void onEnable() {
         instance = this;
+        kitSelectorKey = new NamespacedKey(this, "kit_selector");
         saveDefaultConfig();
 
         // Load Maps

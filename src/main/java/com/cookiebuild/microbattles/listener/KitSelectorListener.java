@@ -10,8 +10,10 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 
 import com.cookiebuild.cookiedough.service.MinigameProgressionService;
+import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.ui.KitSelectionUI;
 
@@ -37,12 +39,14 @@ public class KitSelectorListener implements Listener {
             return;
         }
 
-        if (item == null || item.getType() != Material.COOKIE || !item.hasItemMeta()) {
+        if (item == null || !item.hasItemMeta()) {
             return;
         }
 
         ItemMeta meta = item.getItemMeta();
-        if (meta == null || !KIT_SELECTOR_NAME.equals(meta.getDisplayName())) {
+        boolean hasMarker = meta != null && meta.getPersistentDataContainer().has(
+                MicroBattles.getInstance().getKitSelectorKey(), PersistentDataType.BYTE);
+        if (!KitSelectorOwnership.isMicroBattlesSelector(item.getType(), hasMarker)) {
             return;
         }
 
@@ -59,6 +63,8 @@ public class KitSelectorListener implements Listener {
                     "§7Right-click to select your kit",
                     "§7Choose from available kits",
                     "§7and their different tiers"));
+            meta.getPersistentDataContainer().set(
+                    MicroBattles.getInstance().getKitSelectorKey(), PersistentDataType.BYTE, (byte) 1);
             kitSelector.setItemMeta(meta);
         }
         return kitSelector;
