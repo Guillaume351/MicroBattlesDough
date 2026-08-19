@@ -13,7 +13,6 @@ import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.generator.ChunkGenerator;
-import net.kyori.adventure.util.TriState;
 import io.papermc.paper.math.Position;
 
 import java.io.File;
@@ -92,10 +91,6 @@ public class MapManager {
                 .forcedSpawnPosition(Position.block(
                         forcedSpawn.getBlockX(), forcedSpawn.getBlockY(), forcedSpawn.getBlockZ()),
                         forcedSpawn.getYaw(), forcedSpawn.getPitch())
-                // Match arenas load their exact team-spawn chunks before teleporting.
-                // Preparing Paper's generic spawn area here blocks the server thread for
-                // several seconds every time the standby game is replaced.
-                .keepSpawnLoaded(TriState.FALSE)
                 .generator(new VoidChunkGenerator())
                 .createWorld();
 
