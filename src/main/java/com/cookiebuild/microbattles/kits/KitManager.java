@@ -26,6 +26,7 @@ import com.cookiebuild.cookiedough.game.GameManager;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
 import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.service.MinigameProgressionService;
+import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
 import com.cookiebuild.microbattles.listener.KitSelectorListener;
@@ -256,9 +257,11 @@ public final class KitManager {
         if (!(game instanceof MicroBattlesGame) || game.hasStarted() || getKitLevel(kitName, level) == null) {
             return false;
         }
+        CookieDough.getInstance().getPracticeManager().stop(player, false);
         equipTieredKit(player, kitName, level);
-        player.sendMessage(ChatColor.AQUA + "Previewing " + kitName + " " + roman(level)
-                + " for 8 seconds. Your selection was not changed.");
+        CookieDough.getInstance().getPlayerHubMenu().ensureQueueControl(player);
+        player.sendMessage(ChatColor.AQUA + LocaleManager.getMessage("microbattles.kit.preview",
+                player.locale(), kitName, roman(level)));
         Bukkit.getScheduler().runTaskLater(MicroBattles.getInstance(), () -> {
             CookiePlayer current = PlayerManager.getPlayer(player);
             Game currentGame = current == null ? null : GameManager.getGameOfPlayer(current);
@@ -266,6 +269,7 @@ public final class KitManager {
                 player.getInventory().clear();
                 player.getInventory().setArmorContents(null);
                 KitSelectorListener.giveKitSelectorCookie(player);
+                CookieDough.getInstance().getPlayerHubMenu().ensureQueueControl(player);
             }
         }, 160L);
         return true;
