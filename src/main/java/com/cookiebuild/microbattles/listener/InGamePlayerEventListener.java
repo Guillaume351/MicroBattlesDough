@@ -29,6 +29,7 @@ import com.cookiebuild.cookiedough.player.PlayerManager;
 import com.cookiebuild.cookiedough.player.PlayerState;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.game.MicroBattlesGame;
+import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.map.MapManager;
 
 public class InGamePlayerEventListener extends BaseEventBlocker {
@@ -180,7 +181,9 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        MapManager.removeNextMapVote(event.getPlayer().getUniqueId());
+        var playerId = event.getPlayer().getUniqueId();
+        MapManager.removeNextMapVote(playerId);
+        KitManager.getInstance().clearSelectedKit(playerId);
         removeFromMicroBattles(event.getPlayer());
     }
 

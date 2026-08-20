@@ -1,13 +1,16 @@
 package com.cookiebuild.microbattles.game;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.bukkit.Bukkit;
@@ -21,14 +24,12 @@ import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
-import com.cookiebuild.cookiedough.dao.GenericDAOImpl;
 import com.cookiebuild.cookiedough.game.Game;
 import com.cookiebuild.cookiedough.game.GameManager;
 import com.cookiebuild.cookiedough.game.GameState;
 import com.cookiebuild.cookiedough.lobby.LobbyManager;
 import com.cookiebuild.cookiedough.lobby.LobbyScoreboard;
 import com.cookiebuild.cookiedough.model.Match;
-import com.cookiebuild.cookiedough.model.PlayerData;
 import com.cookiebuild.cookiedough.player.CookiePlayer;
 import com.cookiebuild.cookiedough.player.PlayerState;
 import com.cookiebuild.cookiedough.service.MatchService;
@@ -70,30 +71,29 @@ public class MicroBattlesGame extends Game {
     private boolean cleanupStarted;
 
     private final MatchService matchService;
-    private Match currentMatchInstance;
-    private final HashMap<UUID, PlayerData> participantPlayerData = new HashMap<>();
+    private CompletableFuture<Match> matchFuture = CompletableFuture.completedFuture(null);
+    private final Set<UUID> participantIds = new LinkedHashSet<>();
     private final HashMap<UUID, Integer> playerKillsThisMatch = new HashMap<>();
     private final HashMap<UUID, Integer> playerDeathsThisMatch = new HashMap<>();
     private final HashMap<UUID, Integer> playerAssistsThisMatch = new HashMap<>();
     private final HashMap<UUID, Integer> playerTeamsEliminatedThisMatch = new HashMap<>();
+    private static final int MAXIMUM_RUNNING_SECONDS = 300;
+    private int runningSeconds;
+    private boolean timeoutWarningSent;
+    private boolean timedOut;
+    private boolean outcomePersisted;
 
-    public MicroBattlesGame() {
-        super("MicroBattles");
+    public MicroBattlesGame(UUID gameId, GameMap preparedMap, String mapName) {
+        super("MicroBattles", gameId);
         setupTeams();
 
         setCapacity(teamSize * 4);
         this.scoreboardManager = new MicroBattlesScoreboardManager();
         this.matchService = new MatchService(null);
 
-        try {
-            String randomMapName = MapManager.getRandomMapName();
-            map = MapManager.loadMapForGame(this.getGameId(), randomMapName);
-            this.wallCoordinates = MapManager.getWallCoordinatesForMap(randomMapName);
-            map.identifyWallBlocks(wallCoordinates);
-        } catch (IOException | RuntimeException error) {
-            cleanupMap();
-            throw new IllegalStateException("MicroBattles map preparation failed: " + error.getMessage(), error);
-        }
+        map = java.util.Objects.requireNonNull(preparedMap, "preparedMap");
+        this.wallCoordinates = MapManager.getWallCoordinatesForMap(mapName);
+        map.identifyWallBlocks(wallCoordinates);
     }
 
     public void setupTeams() {
@@ -114,7 +114,8 @@ public class MicroBattlesGame extends Game {
                 .toList();
         if (!onlineParty.isEmpty()) {
             if (onlineParty.size() > teamSize) {
-                player.getPlayer().sendMessage("§cYour online party is larger than a MicroBattles team.");
+                player.getPlayer().sendMessage("§c" + LocaleManager.getMessage(
+                        "microbattles.party.too_large", player.getPlayer().locale()));
                 return null;
             }
             MicroBattlesTeam partyTeam = teams.values().stream()
@@ -145,21 +146,13 @@ public class MicroBattlesGame extends Game {
         }
 
         if (super.addPlayer(player)) {
-            GenericDAOImpl<PlayerData> playerDataDAO = new GenericDAOImpl<>(PlayerData.class);
-            PlayerData pd = playerDataDAO.findById(player.getPlayer().getUniqueId());
-            if (pd != null) {
-                participantPlayerData.put(player.getPlayer().getUniqueId(), pd);
-            } else {
-                MicroBattles.getInstance().getLogger().warning(
-                        "Could not find PlayerData for " + player.getPlayer().getName() + " when adding to game.");
-                super.removePlayer(player);
-                player.setState(PlayerState.LOBBY);
-                return false;
-            }
+            UUID playerId = player.getPlayer().getUniqueId();
+            participantIds.add(playerId);
+            KitManager.getInstance().preload(playerId);
 
             MicroBattlesTeam assignedTeam = assignTeam(player);
             if (assignedTeam == null) {
-                participantPlayerData.remove(player.getPlayer().getUniqueId());
+                participantIds.remove(player.getPlayer().getUniqueId());
                 super.removePlayer(player);
                 player.setState(PlayerState.LOBBY);
                 return false;
@@ -172,7 +165,7 @@ public class MicroBattlesGame extends Game {
                 refreshNameColors();
             } catch (RuntimeException exception) {
                 assignedTeam.removePlayer(player);
-                participantPlayerData.remove(player.getPlayer().getUniqueId());
+                participantIds.remove(player.getPlayer().getUniqueId());
                 super.removePlayer(player);
                 player.setState(PlayerState.LOBBY);
                 scoreboardManager.removeScoreboard(player.getPlayer());
@@ -194,19 +187,23 @@ public class MicroBattlesGame extends Game {
         wasInQuickStart = false;
         remainingTimeAtQuickStart = 0;
         ticksSinceQuickStart = 0;
-
-        try {
-            if (!participantPlayerData.isEmpty()) {
-                this.currentMatchInstance = matchService.startMatch("MicroBattles",
-                        new ArrayList<>(participantPlayerData.values()));
-                MicroBattles.getInstance().getLogger()
-                        .info("MicroBattles match started: " + this.currentMatchInstance.getId());
+        runningSeconds = 0;
+        timeoutWarningSent = false;
+        timedOut = false;
+        Set<UUID> starters = Set.copyOf(participantIds);
+        matchFuture = new CompletableFuture<>();
+        Bukkit.getScheduler().runTaskAsynchronously(MicroBattles.getInstance(), () -> {
+            try {
+                Match match = matchService.startMatchByPlayerIds("MicroBattles", starters);
+                matchFuture.complete(match);
+                MicroBattles.getInstance().getLogger().info("MicroBattles match started: " + match.getId());
+            } catch (RuntimeException exception) {
+                MicroBattles.getInstance().getLogger().severe(
+                        "Match persistence is unavailable; gameplay will continue without stats: "
+                                + exception.getMessage());
+                matchFuture.complete(null);
             }
-        } catch (RuntimeException exception) {
-            this.currentMatchInstance = null;
-            MicroBattles.getInstance().getLogger().severe(
-                    "Match persistence is unavailable; gameplay will continue without stats: " + exception.getMessage());
-        }
+        });
 
         equipKitsForGameStart();
     }
@@ -214,7 +211,7 @@ public class MicroBattlesGame extends Game {
     private void equipKitsForGameStart() {
         KitManager kitManager = KitManager.getInstance();
         for (CookiePlayer cookiePlayer : getPlayers()) {
-            kitManager.equipLastSelectedKit(cookiePlayer.getPlayer());
+            kitManager.equipSelectedKit(cookiePlayer.getPlayer());
             giveTeamColoredWool(cookiePlayer);
 
             String selectedKitName = kitManager.getSelectedKit(cookiePlayer.getPlayer().getUniqueId());
@@ -233,7 +230,8 @@ public class MicroBattlesGame extends Game {
             cookiePlayer.getPlayer().showTitle(
                     Title.title(
                             Component.text("§6" + kitName),
-                            Component.text("§aKit equipped!"),
+                            Component.text("§a" + LocaleManager.getMessage(
+                                    "microbattles.kit.equipped.subtitle", cookiePlayer.getPlayer().locale())),
                             Title.Times.times(Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofSeconds(1))));
         }
     }
@@ -317,6 +315,19 @@ public class MicroBattlesGame extends Game {
         updateGameInfo();
 
         if (getState() == GameState.RUNNING) {
+            runningSeconds++;
+            if (!timeoutWarningSent && runningSeconds >= MAXIMUM_RUNNING_SECONDS - 60) {
+                timeoutWarningSent = true;
+                for (CookiePlayer player : getPlayers()) {
+                    player.getPlayer().sendMessage(Component.text(LocaleManager.getMessage(
+                            "microbattles.timeout.warning", player.getPlayer().locale()), NamedTextColor.YELLOW));
+                }
+            }
+            if (runningSeconds >= MAXIMUM_RUNNING_SECONDS) {
+                timedOut = true;
+                endGame(timeoutWinner());
+                return;
+            }
             if (!wallRemoved) {
                 wallRemoveTimer++;
                 if (wallRemoveTimer >= WALL_REMOVE_DELAY_SECONDS) {
@@ -357,6 +368,9 @@ public class MicroBattlesGame extends Game {
                 if (!wallRemoved) {
                     countdownInfo = LocaleManager.getMessage("game.wall_drops_in", bukkitPlayer.locale(),
                             WALL_REMOVE_DELAY_SECONDS - wallRemoveTimer);
+                } else {
+                    countdownInfo = LocaleManager.getMessage("microbattles.time_left", bukkitPlayer.locale(),
+                            formatSeconds(MAXIMUM_RUNNING_SECONDS - runningSeconds));
                 }
             } else {
                 gameStateText = LocaleManager.getMessage("game.ended", bukkitPlayer.locale());
@@ -366,12 +380,16 @@ public class MicroBattlesGame extends Game {
             scoreboardManager.ensureScoreboard(bukkitPlayer, Component.text("MicroBattles", NamedTextColor.GOLD));
             scoreboardManager.updateLine(bukkitPlayer, 6, Component.empty());
             scoreboardManager.updateLine(bukkitPlayer, 5,
-                    Component.text("Teams Left: ", NamedTextColor.WHITE)
+                    Component.text(LocaleManager.getMessage("microbattles.scoreboard.teams_left",
+                            bukkitPlayer.locale()), NamedTextColor.WHITE)
                             .append(Component.text(getActiveTeamsCount(), NamedTextColor.GREEN)));
             scoreboardManager.updateLine(bukkitPlayer, 4,
-                    Component.text("Kills: ", NamedTextColor.WHITE)
+                    Component.text(LocaleManager.getMessage("microbattles.scoreboard.kills",
+                            bukkitPlayer.locale()), NamedTextColor.WHITE)
                             .append(Component.text(getPlayerKills(player), NamedTextColor.GREEN)));
-            scoreboardManager.updateLine(bukkitPlayer, 3, Component.text(" "));
+            scoreboardManager.updateLine(bukkitPlayer, 3,
+                    Component.text(LocaleManager.getMessage("microbattles.scoreboard.time", bukkitPlayer.locale(),
+                            formatSeconds(MAXIMUM_RUNNING_SECONDS - runningSeconds)), NamedTextColor.YELLOW));
             scoreboardManager.updateLine(bukkitPlayer, 2, Component.text("  "));
             scoreboardManager.updateLine(bukkitPlayer, 1,
                     Component.text("www.cookie-build.com", NamedTextColor.YELLOW));
@@ -379,7 +397,7 @@ public class MicroBattlesGame extends Game {
             int line = 11;
             for (MicroBattlesTeam team : teams.values()) {
                 scoreboardManager.updateLine(bukkitPlayer, line--,
-                        Component.text(getTeamMarker(team.getName()) + " " + team.getName() + ": ",
+                        Component.text(getTeamMarker(team.getName()) + " " + localizedTeamName(bukkitPlayer, team) + ": ",
                                 getTeamTextColor(team.getName()))
                                 .append(Component.text(team.getAlivePlayers().size(), NamedTextColor.WHITE)));
             }
@@ -390,6 +408,11 @@ public class MicroBattlesGame extends Game {
         return (int) teams.values().stream().filter(
                 team -> team.getPlayers().stream().anyMatch(p -> p.getPlayer().getGameMode() != GameMode.SPECTATOR))
                 .count();
+    }
+
+    private static String formatSeconds(int seconds) {
+        int safe = Math.max(0, seconds);
+        return String.format(java.util.Locale.ROOT, "%d:%02d", safe / 60, safe % 60);
     }
 
     private int getKillsThisMatch(UUID playerId) {
@@ -443,81 +466,120 @@ public class MicroBattlesGame extends Game {
         }
     }
 
+    private MicroBattlesTeam timeoutWinner() {
+        List<MicroBattlesTimeoutPolicy.TeamStanding> standings = teams.values().stream().map(team -> {
+            List<CookiePlayer> members = team.getPlayers();
+            int alive = (int) members.stream()
+                    .filter(player -> player.getPlayer().getGameMode() != GameMode.SPECTATOR).count();
+            int kills = members.stream().mapToInt(player -> getKillsThisMatch(
+                    player.getPlayer().getUniqueId())).sum();
+            int teamsEliminated = members.stream().mapToInt(player -> playerTeamsEliminatedThisMatch
+                    .getOrDefault(player.getPlayer().getUniqueId(), 0)).sum();
+            double health = members.stream()
+                    .filter(player -> player.getPlayer().getGameMode() != GameMode.SPECTATOR)
+                    .map(CookiePlayer::getPlayer).filter(Player::isOnline)
+                    .mapToDouble(Player::getHealth).sum();
+            return new MicroBattlesTimeoutPolicy.TeamStanding(
+                    team.getName(), alive, teamsEliminated, kills, health);
+        }).filter(standing -> standing.alivePlayers() > 0).toList();
+        String winner = MicroBattlesTimeoutPolicy.winner(standings).orElse(null);
+        return winner == null ? null : teams.get(winner);
+    }
+
     private void endGame(MicroBattlesTeam winningTeam) {
         if (getState() == GameState.FINISHED) {
             return;
         }
         setState(GameState.FINISHED);
 
-        List<PlayerData> winnerPlayerDataList = new ArrayList<>();
+        Set<UUID> winnerIds = new LinkedHashSet<>();
         if (winningTeam != null) {
             for (CookiePlayer winner : winningTeam.getPlayers()) {
-                PlayerData pd = participantPlayerData.get(winner.getPlayer().getUniqueId());
-                if (pd != null) {
-                    winnerPlayerDataList.add(pd);
-                }
+                winnerIds.add(winner.getPlayer().getUniqueId());
             }
         }
-
-        if (this.currentMatchInstance != null) {
-            try {
-                List<MatchService.Performance> performances = participantPlayerData.keySet().stream()
-                        .map(playerId -> {
-                            boolean winner = winnerPlayerDataList.stream()
-                                    .anyMatch(player -> player.getId().equals(playerId));
-                            return new MatchService.Performance(playerId,
-                                getKillsThisMatch(playerId), getDeathsThisMatch(playerId),
-                                playerAssistsThisMatch.getOrDefault(playerId, 0),
-                                createPerformanceMetrics(playerId, winner));
-                        })
-                        .toList();
-                matchService.completeMatch(this.currentMatchInstance, winnerPlayerDataList, performances);
-            } catch (Exception e) {
-                MicroBattles.getInstance().getLogger().severe("Error during match finalization: " + e.getMessage());
+        persistOutcomeAndRewards(winnerIds);
+        sendPostMatchSummary(winnerIds);
+        if (timedOut) {
+            for (CookiePlayer player : getPlayers()) {
+                player.getPlayer().sendMessage(Component.text(LocaleManager.getMessage(
+                        "microbattles.timeout.result", player.getPlayer().locale()), NamedTextColor.YELLOW));
             }
         }
-
-        MinigameProgressionService progressionService = new MinigameProgressionService(null);
-        String rewardSource = currentMatchInstance == null
-                ? "micro-game:" + getGameId() + ":reward"
-                : "match:" + currentMatchInstance.getId() + ":micro-reward";
-        for (UUID playerId : participantPlayerData.keySet()) {
-            boolean isWinner = winnerPlayerDataList.stream().anyMatch(player -> player.getId().equals(playerId));
-            int kills = getKillsThisMatch(playerId);
-            int assists = playerAssistsThisMatch.getOrDefault(playerId, 0);
-            int coinsGained = (isWinner ? 50 : 10) + kills * 5 + assists * 2;
-            int xpGained = (isWinner ? 100 : 25) + kills * 10 + assists * 5;
-            try {
-                int oldLevel = progressionService.getLevel(playerId, MinigameProgressionService.MICROBATTLES);
-                var stats = progressionService.applyReward(playerId, MinigameProgressionService.MICROBATTLES,
-                        xpGained, coinsGained, rewardSource);
-                LobbyScoreboard.invalidatePlayerCache(playerId);
-                Player player = Bukkit.getPlayer(playerId);
-                if (player != null && player.isOnline()) {
-                    if (stats.getLevel() > oldLevel) {
-                        player.sendMessage("§6§l✦ LEVEL UP! ✦");
-                        player.sendMessage("§eYou reached level §a" + stats.getLevel() + "§e in MicroBattles!");
-                        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
-                    }
-                    player.sendMessage(LocaleManager.getMessage(isWinner ? "reward.victory" : "reward.defeat",
-                            player.locale(), coinsGained, xpGained));
-                }
-            } catch (RuntimeException exception) {
-                MicroBattles.getInstance().getLogger()
-                        .severe("Failed to save rewards for player " + playerId + ": " + exception.getMessage());
-            }
-        }
-        for (UUID playerId : participantPlayerData.keySet()) {
-            Player player = Bukkit.getPlayer(playerId);
-            if (player != null && player.isOnline()) {
-                boolean winner = winnerPlayerDataList.stream().anyMatch(candidate -> candidate.getId().equals(playerId));
-                com.cookiebuild.cookiedough.CookieDough.getInstance().getGoalTracker()
-                        .recordMatch(player, "MicroBattles", winner, getKillsThisMatch(playerId));
-            }
-        }
-        sendPostMatchSummary(winnerPlayerDataList);
         offerReplay();
         scheduleCleanup(20L * 10);
+    }
+
+    private void persistOutcomeAndRewards(Set<UUID> winnerIds) {
+        if (outcomePersisted) return;
+        outcomePersisted = true;
+        Set<UUID> players = Set.copyOf(participantIds);
+        List<MatchService.Performance> performances = players.stream().map(playerId ->
+                new MatchService.Performance(playerId, getKillsThisMatch(playerId), getDeathsThisMatch(playerId),
+                        playerAssistsThisMatch.getOrDefault(playerId, 0),
+                        createPerformanceMetrics(playerId, winnerIds.contains(playerId)))).toList();
+        Map<UUID, RewardPlan> rewards = players.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
+                playerId -> playerId,
+                playerId -> {
+                    boolean winner = winnerIds.contains(playerId);
+                    int kills = getKillsThisMatch(playerId);
+                    int assists = playerAssistsThisMatch.getOrDefault(playerId, 0);
+                    return new RewardPlan(winner, kills, assists,
+                            (winner ? 50 : 10) + kills * 5 + assists * 2,
+                            (winner ? 100 : 25) + kills * 10 + assists * 5);
+                }));
+        CompletableFuture<Match> pendingMatch = matchFuture;
+        Bukkit.getScheduler().runTaskAsynchronously(MicroBattles.getInstance(), () -> {
+            Match durableMatch = null;
+            try {
+                durableMatch = pendingMatch.get(5, TimeUnit.SECONDS);
+                if (durableMatch != null) {
+                    matchService.completeMatchByWinnerIds(durableMatch, winnerIds, performances);
+                }
+            } catch (Exception exception) {
+                MicroBattles.getInstance().getLogger().severe(
+                        "Could not persist MicroBattles result: " + exception.getMessage());
+            }
+            String source = "game:" + getGameId() + ":microbattles-reward";
+            MinigameProgressionService progressionService = new MinigameProgressionService(null);
+            List<RewardNotice> notices = new ArrayList<>();
+            for (Map.Entry<UUID, RewardPlan> entry : rewards.entrySet()) {
+                UUID playerId = entry.getKey();
+                RewardPlan reward = entry.getValue();
+                try {
+                    int oldLevel = progressionService.getLevel(playerId, MinigameProgressionService.MICROBATTLES);
+                    var result = progressionService.applyReward(playerId, MinigameProgressionService.MICROBATTLES,
+                            reward.xp(), reward.coins(), source);
+                    com.cookiebuild.cookiedough.CookieDough.getInstance().getGoalTracker()
+                            .recordMatch(playerId, "MicroBattles", reward.winner(), reward.kills());
+                    notices.add(new RewardNotice(playerId, reward.winner(), reward.coins(), reward.xp(),
+                            result.getLevel(), result.getLevel() > oldLevel));
+                } catch (RuntimeException exception) {
+                    MicroBattles.getInstance().getLogger().severe(
+                            "Failed to save rewards for player " + playerId + ": " + exception.getMessage());
+                }
+            }
+            Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> notices.forEach(this::sendRewardNotice));
+        });
+    }
+
+    private void sendRewardNotice(RewardNotice notice) {
+        LobbyScoreboard.invalidatePlayerCache(notice.playerId());
+        Player player = Bukkit.getPlayer(notice.playerId());
+        if (player == null || !player.isOnline()) return;
+        if (notice.levelUp()) {
+            player.sendMessage(LocaleManager.getMessage("microbattles.level_up.title", player.locale()));
+            player.sendMessage(LocaleManager.getMessage("microbattles.level_up.detail", player.locale(), notice.level()));
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
+        }
+        player.sendMessage(LocaleManager.getMessage(notice.winner() ? "reward.victory" : "reward.defeat",
+                player.locale(), notice.coins(), notice.xp()));
+    }
+
+    private record RewardPlan(boolean winner, int kills, int assists, int coins, int xp) {
+    }
+
+    private record RewardNotice(UUID playerId, boolean winner, int coins, int xp, int level, boolean levelUp) {
     }
 
     @Override
@@ -540,7 +602,7 @@ public class MicroBattlesGame extends Game {
         if (getState() == GameState.RUNNING) {
             checkForWinner();
         } else {
-            participantPlayerData.remove(player.getPlayer().getUniqueId());
+            participantIds.remove(player.getPlayer().getUniqueId());
         }
     }
 
@@ -634,7 +696,8 @@ public class MicroBattlesGame extends Game {
         if (killer != null && !arePlayersInSameTeam(victim, killer)) {
             playerKillsThisMatch.put(killer.getPlayer().getUniqueId(),
                     getKillsThisMatch(killer.getPlayer().getUniqueId()) + 1);
-            killer.getPlayer().sendMessage("§aYou killed " + getColoredPlayerName(victim));
+            killer.getPlayer().sendMessage("§a" + LocaleManager.getMessage(
+                    "microbattles.kill", killer.getPlayer().locale(), getColoredPlayerName(victim)));
             boolean teamEliminated = victimTeam != null && victimTeam.getPlayers().stream()
                     .filter(player -> !player.equals(victim))
                     .noneMatch(player -> player.getState() == PlayerState.IN_GAME
@@ -703,8 +766,10 @@ public class MicroBattlesGame extends Game {
             KitSelectorListener.giveKitSelectorCookie(player.getPlayer());
             player.getPlayer().showTitle(
                     Title.title(
-                            Component.text("§6Kit Selection"),
-                            Component.text("§aUse the cookie to choose your kit!"),
+                            Component.text("§6" + LocaleManager.getMessage(
+                                    "microbattles.kit.menu.title", player.getPlayer().locale())),
+                            Component.text("§a" + LocaleManager.getMessage(
+                                    "microbattles.kit.selector.hint", player.getPlayer().locale())),
                             Title.Times.times(Duration.ofSeconds(1), Duration.ofSeconds(3), Duration.ofSeconds(1))));
             updatePlayerNameColor(player);
         }
@@ -726,10 +791,50 @@ public class MicroBattlesGame extends Game {
     }
 
     public void shutdown() {
+        if (getState() == GameState.RUNNING && !outcomePersisted) {
+            persistInterruptedOutcome();
+        }
         if (getState() != GameState.FINISHED) {
             setState(GameState.FINISHED);
         }
         cleanupGameResources();
+    }
+
+    private void persistInterruptedOutcome() {
+        outcomePersisted = true;
+        List<MatchService.Performance> performances = Set.copyOf(participantIds).stream()
+                .map(playerId -> new MatchService.Performance(
+                        playerId,
+                        getKillsThisMatch(playerId),
+                        getDeathsThisMatch(playerId),
+                        playerAssistsThisMatch.getOrDefault(playerId, 0),
+                        interruptedPerformanceMetrics(playerId)))
+                .toList();
+        CompletableFuture<Match> pendingMatch = matchFuture;
+        boolean flushed = BoundedAsyncFlush.runAndAwait(() -> {
+            try {
+                Match durableMatch = pendingMatch.get(1500, TimeUnit.MILLISECONDS);
+                if (durableMatch != null) {
+                    new MatchService(null).completeMatchByWinnerIds(durableMatch, Set.of(), performances);
+                }
+            } catch (Exception exception) {
+                logWarning("Could not persist interrupted MicroBattles match: " + exception.getMessage());
+            }
+        }, Duration.ofSeconds(2));
+        if (!flushed) {
+            logWarning("Interrupted MicroBattles persistence exceeded the 2 second shutdown budget");
+        }
+    }
+
+    private Map<String, Object> interruptedPerformanceMetrics(UUID playerId) {
+        Map<String, Object> metrics = createPerformanceMetrics(playerId, false);
+        metrics.put("interrupted", true);
+        return metrics;
+    }
+
+    private void logWarning(String message) {
+        MicroBattles plugin = MicroBattles.getInstance();
+        if (plugin != null) plugin.getLogger().warning(message);
     }
 
     private Map<String, Object> createPerformanceMetrics(UUID playerId, boolean winner) {
@@ -754,6 +859,8 @@ public class MicroBattlesGame extends Game {
         metrics.put("kitTier", tier);
         metrics.put("teamsEliminated", playerTeamsEliminatedThisMatch.getOrDefault(playerId, 0));
         metrics.put("won", winner);
+        metrics.put("durationSeconds", runningSeconds);
+        metrics.put("timeout", timedOut);
         metrics.put("weeklyRotation", KitManager.getInstance().getWeeklyFreeKits());
         return metrics;
     }
@@ -795,6 +902,11 @@ public class MicroBattlesGame extends Game {
         };
     }
 
+    private String localizedTeamName(Player player, MicroBattlesTeam team) {
+        return LocaleManager.getMessage("microbattles.team."
+                + team.getName().toLowerCase(java.util.Locale.ROOT), player.locale());
+    }
+
     private String getTeamMarker(String teamName) {
         return switch (teamName.toLowerCase()) {
             case "red" -> "●";
@@ -805,32 +917,35 @@ public class MicroBattlesGame extends Game {
         };
     }
 
-    private void sendPostMatchSummary(List<PlayerData> winners) {
-        for (UUID playerId : participantPlayerData.keySet()) {
+    private void sendPostMatchSummary(Set<UUID> winners) {
+        for (UUID playerId : participantIds) {
             Player player = Bukkit.getPlayer(playerId);
             if (player == null || !player.isOnline()) {
                 continue;
             }
-            boolean winner = winners.stream().anyMatch(candidate -> candidate.getId().equals(playerId));
-            String outcome = winners.isEmpty() ? "DRAW" : winner ? "VICTORY" : "ELIMINATED";
+            boolean winner = winners.contains(playerId);
+            String outcomeKey = winners.isEmpty() ? "microbattles.outcome.draw"
+                    : winner ? "microbattles.outcome.victory" : "microbattles.outcome.eliminated";
             NamedTextColor outcomeColor = winner ? NamedTextColor.GREEN
                     : winners.isEmpty() ? NamedTextColor.YELLOW : NamedTextColor.RED;
-            player.showTitle(Title.title(Component.text(outcome, outcomeColor),
-                    Component.text("Your contribution", NamedTextColor.GRAY),
+            player.showTitle(Title.title(Component.text(LocaleManager.getMessage(outcomeKey, player.locale()), outcomeColor),
+                    Component.text(LocaleManager.getMessage("microbattles.summary.contribution", player.locale()),
+                            NamedTextColor.GRAY),
                     Title.Times.times(Duration.ofMillis(250), Duration.ofSeconds(3), Duration.ofSeconds(1))));
-            player.sendMessage(Component.text("──────── Match Summary ────────", NamedTextColor.GOLD));
-            player.sendMessage(Component.text("Kills " + getKillsThisMatch(playerId), NamedTextColor.GREEN)
-                    .append(Component.text("  •  Assists "
-                            + playerAssistsThisMatch.getOrDefault(playerId, 0), NamedTextColor.AQUA))
-                    .append(Component.text("  •  Teams eliminated "
-                            + playerTeamsEliminatedThisMatch.getOrDefault(playerId, 0), NamedTextColor.YELLOW)));
+            player.sendMessage(Component.text(LocaleManager.getMessage(
+                    "microbattles.summary.header", player.locale()), NamedTextColor.GOLD));
+            player.sendMessage(Component.text(LocaleManager.getMessage("microbattles.summary.stats", player.locale(),
+                    getKillsThisMatch(playerId), playerAssistsThisMatch.getOrDefault(playerId, 0),
+                    playerTeamsEliminatedThisMatch.getOrDefault(playerId, 0)), NamedTextColor.GREEN));
             player.sendMessage(Component.text(
                     com.cookiebuild.cookiedough.CookieDough.getInstance().getGoalTracker().summary(playerId),
                     NamedTextColor.LIGHT_PURPLE));
-            player.sendMessage(Component.text("[SHARE FEEDBACK]", NamedTextColor.YELLOW)
+            player.sendMessage(Component.text(LocaleManager.getMessage(
+                    "microbattles.feedback.action", player.locale()), NamedTextColor.YELLOW)
                     .clickEvent(ClickEvent.openUrl("https://www.cookie-build.com"))
                     .hoverEvent(HoverEvent.showText(Component.text(
-                            "Share ideas and report kit or map balance issues", NamedTextColor.GRAY))));
+                            LocaleManager.getMessage("microbattles.feedback.hover", player.locale()),
+                            NamedTextColor.GRAY))));
         }
     }
 

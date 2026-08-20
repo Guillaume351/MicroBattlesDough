@@ -7,7 +7,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -33,10 +35,17 @@ import com.cookiebuild.microbattles.listener.KitSelectorListener;
 
 /** Kit catalog, unlock policy and balanced sidegrade loadouts. */
 public final class KitManager {
+    private static final int MAX_CACHED_SELECTIONS = 4_096;
     private static KitManager instance;
     private final Map<String, Kit> originalKits = new HashMap<>();
     private final Map<String, TieredKit> tieredKits = new HashMap<>();
-    private final Map<UUID, String> playerSelectedKits = new HashMap<>();
+    private final Map<UUID, String> playerSelectedKits = new ConcurrentHashMap<>();
+    private final Set<UUID> profileLoads = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> discardedProfileLoads = ConcurrentHashMap.newKeySet();
+    private final Object selectionCacheLock = new Object();
+    private static final long ACTION_COOLDOWN_MILLIS = 750L;
+    private final PlayerActionGate mutationGate = new PlayerActionGate(
+            ACTION_COOLDOWN_MILLIS, System::currentTimeMillis);
 
     private KitManager() {
         initializeCatalog();
@@ -123,14 +132,82 @@ public final class KitManager {
         return kits.isEmpty() ? originalKits.get("Default") : kits.get(new Random().nextInt(kits.size()));
     }
 
+    /** Durable mutation; callers must invoke this from an asynchronous task. */
     public void selectKit(UUID playerId, String kitName, int level) {
-        playerSelectedKits.put(playerId, kitName + ":" + level);
-        CookieDough.createMinigameProgressionService().setLastSelectedKit(playerId,
-                MinigameProgressionService.MICROBATTLES, kitName, level);
+        persistThenCache(
+                () -> CookieDough.createMinigameProgressionService().setLastSelectedKit(playerId,
+                        MinigameProgressionService.MICROBATTLES, kitName, level),
+                () -> cacheSelection(playerId, kitName + ":" + level, true));
+    }
+
+    static void persistThenCache(Runnable durableWrite, Runnable cacheWrite) {
+        durableWrite.run();
+        cacheWrite.run();
+    }
+
+    /** Coalesced background preload; match-start equipment only reads this cache. */
+    public void preload(UUID playerId) {
+        synchronized (selectionCacheLock) {
+            discardedProfileLoads.remove(playerId);
+        }
+        if (playerSelectedKits.containsKey(playerId) || !profileLoads.add(playerId)) return;
+        Bukkit.getScheduler().runTaskAsynchronously(MicroBattles.getInstance(), () -> {
+            try {
+                var stats = CookieDough.createMinigameProgressionService().getOrCreateStats(
+                        playerId, MinigameProgressionService.MICROBATTLES);
+                String kitName = stats.getLastSelectedKitName();
+                int level = stats.getLastSelectedKitLevel();
+                KitLevel kitLevel = getKitLevel(kitName, level);
+                boolean unlocked = kitLevel != null && (kitLevel.isDefaultUnlocked()
+                        || (level == 1 && isWeeklyFreeKit(kitName))
+                        || stats.hasUnlockedKit(kitName + ":L" + level));
+                synchronized (selectionCacheLock) {
+                    if (!discardedProfileLoads.remove(playerId)) {
+                        cacheSelection(playerId, unlocked ? kitName + ":" + level : "Default:0", false);
+                    }
+                }
+            } catch (RuntimeException error) {
+                MicroBattles.getInstance().getLogger().warning(
+                        "Could not preload MicroBattles kit profile for " + playerId + ": " + error.getMessage());
+                synchronized (selectionCacheLock) {
+                    if (!discardedProfileLoads.remove(playerId)) {
+                        cacheSelection(playerId, "Default:0", false);
+                    }
+                }
+            } finally {
+                profileLoads.remove(playerId);
+                synchronized (selectionCacheLock) {
+                    discardedProfileLoads.remove(playerId);
+                }
+            }
+        });
+    }
+
+    public boolean tryBeginMutation(UUID playerId) {
+        return mutationGate.tryBegin(playerId);
+    }
+
+    public void finishMutation(UUID playerId) {
+        mutationGate.finish(playerId);
     }
 
     public void clearSelectedKit(UUID playerId) {
-        playerSelectedKits.remove(playerId);
+        mutationGate.clear(playerId);
+        synchronized (selectionCacheLock) {
+            playerSelectedKits.remove(playerId);
+            if (profileLoads.contains(playerId)) discardedProfileLoads.add(playerId);
+        }
+    }
+
+    private void cacheSelection(UUID playerId, String selection, boolean replace) {
+        synchronized (selectionCacheLock) {
+            if (playerSelectedKits.size() >= MAX_CACHED_SELECTIONS
+                    && !playerSelectedKits.containsKey(playerId)) {
+                playerSelectedKits.keySet().stream().findFirst().ifPresent(playerSelectedKits::remove);
+            }
+            if (replace) playerSelectedKits.put(playerId, selection);
+            else playerSelectedKits.putIfAbsent(playerId, selection);
+        }
     }
 
     public boolean hasKitSelected(UUID playerId) {
@@ -163,26 +240,9 @@ public final class KitManager {
     }
 
     public String getKitDescription(String kitName, Player player) {
-        return switch (kitName) {
-            case "Default" -> "Reliable sword, bow, blocks and food.";
-            case "Explosive Archer" -> "Limited arrows create a small enemy-only blast on impact.";
-            case "Enderman" -> "A light melee kit with a few repositioning pearls.";
-            case "Tank" -> "Shield and extra armor, traded for permanent Slowness.";
-            case "Ninja" -> "Fast skirmisher with snowballs and double-sneak stealth.";
-            case "Archer" -> "Long-range pressure with more arrows, but weak melee gear.";
-            case "Berserker" -> "Axe fighter who briefly gains Strength below 30% health.";
-            case "Chemist" -> "Carries useful single-use drinkable potions.";
-            case "Assassin" -> "Double-sneak stealth empowers one carefully timed melee hit.";
-            case "Miner" -> "Fast mining and extra blocks for map control, with weak combat gear.";
-            case "Vampire" -> "Restores a small amount of health on enemy melee hits.";
-            case "Frost Mage" -> "Snowballs slow enemies; the wand creates a short temporary ice bridge.";
-            case "Juggernaut" -> "Heavy armor, axe and shield at the cost of severe Slowness.";
-            case "Trapper" -> "Cobwebs and utility supplies reward controlling narrow routes.";
-            case "Alchemist" -> "The brewing stand grants one random short self-buff on cooldown.";
-            case "Knockback Warrior" -> "Controls ledges with Knockback I but deals little direct damage.";
-            case "Mobility" -> "Permanent Speed and light gear for rotations and escapes.";
-            default -> "Unknown kit.";
-        };
+        String key = "microbattles.kit.description."
+                + kitName.toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
+        return LocaleManager.getMessage(key, player.locale());
     }
 
     public boolean isKitLevelUnlocked(MinigameProgressionService service, UUID playerId, String kitName, int level) {
@@ -225,24 +285,13 @@ public final class KitManager {
     }
 
     public void equipLastSelectedKit(Player player) {
-        MinigameProgressionService service = CookieDough.createMinigameProgressionService();
-        var stats = service.getOrCreateStats(player.getUniqueId(), MinigameProgressionService.MICROBATTLES);
-        String kitName = stats.getLastSelectedKitName();
-        int level = stats.getLastSelectedKitLevel();
-        if (kitName != null && !kitName.isBlank()
-                && isKitLevelUnlocked(service, player.getUniqueId(), kitName, level)) {
-            equipTieredKit(player, kitName, level);
-            playerSelectedKits.put(player.getUniqueId(), kitName + ":" + level);
-        } else {
-            originalKits.get("Default").equipPlayer(player);
-            playerSelectedKits.put(player.getUniqueId(), "Default:0");
-        }
+        equipSelectedKit(player);
     }
 
     public void equipSelectedKit(Player player) {
         String selected = playerSelectedKits.get(player.getUniqueId());
         if (selected == null) {
-            equipLastSelectedKit(player);
+            originalKits.get("Default").equipPlayer(player);
             return;
         }
         String[] parts = selected.split(":", 2);

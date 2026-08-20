@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -22,6 +24,7 @@ import com.cookiebuild.cookiedough.model.MinigameProgression;
 import com.cookiebuild.cookiedough.model.PlayerMatchPerformance;
 import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.cookiedough.service.PlayerStatsService;
+import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.kits.KitLevel;
 import com.cookiebuild.microbattles.kits.KitManager;
@@ -31,7 +34,6 @@ import com.cookiebuild.microbattles.ui.bedrock.BedrockUIHelper;
 
 /** Paginated Java selector with stable item metadata and async snapshot loading. */
 public final class KitSelectionUI implements Listener {
-    private static final String TITLE_PREFIX = ChatColor.DARK_AQUA + "Kit Selection • ";
     private static final int PAGE_SIZE = 36;
     private final KitManager kitManager;
     private final BedrockKitSelectionUI bedrockKitSelectionUI;
@@ -39,6 +41,7 @@ public final class KitSelectionUI implements Listener {
     private final NamespacedKey kitLevelKey;
     private final NamespacedKey actionKey;
     private final NamespacedKey pageKey;
+    private final Set<UUID> menuLoads = ConcurrentHashMap.newKeySet();
 
     public KitSelectionUI(KitManager kitManager, MinigameProgressionService ignoredService,
             PlayerStatsService ignoredPlayerStatsService) {
@@ -60,6 +63,11 @@ public final class KitSelectionUI implements Listener {
             return;
         }
         UUID playerId = player.getUniqueId();
+        if (!menuLoads.add(playerId)) {
+            player.sendMessage(ChatColor.YELLOW + LocaleManager.getMessage(
+                    "microbattles.kit.menu.loading", player.locale()));
+            return;
+        }
         Bukkit.getScheduler().runTaskAsynchronously(MicroBattles.getInstance(), () -> {
             try {
                 MenuSnapshot snapshot = loadSnapshot(playerId);
@@ -72,7 +80,10 @@ public final class KitSelectionUI implements Listener {
                 MicroBattles.getInstance().getLogger().warning(
                         "Could not load kit menu for " + playerId + ": " + exception.getMessage());
                 Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () ->
-                        player.sendMessage(ChatColor.RED + "The kit menu could not be loaded. Please try again."));
+                        player.sendMessage(ChatColor.RED + LocaleManager.getMessage(
+                                "microbattles.kit.menu.failed", player.locale())));
+            } finally {
+                menuLoads.remove(playerId);
             }
         });
     }
@@ -116,46 +127,51 @@ public final class KitSelectionUI implements Listener {
         int pageCount = KitPagination.pageCount(snapshot.entries().size(), PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pageCount - 1));
         Inventory inventory = Bukkit.createInventory(null, 54,
-                TITLE_PREFIX + (page + 1) + "/" + pageCount);
-        inventory.setItem(4, playerInfo(snapshot));
-        inventory.setItem(7, rotationInfo(snapshot.rotation()));
+                titlePrefix(player) + (page + 1) + "/" + pageCount);
+        inventory.setItem(4, playerInfo(player, snapshot));
+        inventory.setItem(7, rotationInfo(player, snapshot.rotation()));
 
         List<Entry> pageEntries = KitPagination.page(snapshot.entries(), page, PAGE_SIZE);
         for (int index = 0; index < pageEntries.size(); index++) {
             inventory.setItem(9 + index, kitItem(pageEntries.get(index), player));
         }
-        if (page > 0) inventory.setItem(45, actionItem(Material.ARROW, "Previous page", "previous", page - 1));
-        inventory.setItem(49, actionItem(Material.BARRIER, "Close", "close", page));
-        if (page + 1 < pageCount) inventory.setItem(53, actionItem(Material.ARROW, "Next page", "next", page + 1));
+        if (page > 0) inventory.setItem(45, actionItem(player, Material.ARROW,
+                "microbattles.kit.previous", "previous", page - 1));
+        inventory.setItem(49, actionItem(player, Material.BARRIER,
+                "microbattles.kit.close", "close", page));
+        if (page + 1 < pageCount) inventory.setItem(53, actionItem(player, Material.ARROW,
+                "microbattles.kit.next", "next", page + 1));
         player.openInventory(inventory);
     }
 
-    private ItemStack playerInfo(MenuSnapshot snapshot) {
+    private ItemStack playerInfo(Player player, MenuSnapshot snapshot) {
         ItemStack item = new ItemStack(Material.PLAYER_HEAD);
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.AQUA + "Your MicroBattles Stats");
+        meta.setDisplayName(ChatColor.AQUA + message(player, "microbattles.kit.stats.title"));
         double kd = snapshot.deaths() == 0 ? snapshot.kills() : (double) snapshot.kills() / snapshot.deaths();
         meta.setLore(List.of(
-                ChatColor.YELLOW + "Level: " + snapshot.level(),
-                ChatColor.GOLD + "Coins: " + snapshot.coins(),
-                ChatColor.GREEN + "XP: " + snapshot.experience() + "/" + snapshot.nextLevelExperience(),
-                ChatColor.BLUE + "Wins: " + snapshot.wins(),
-                ChatColor.RED + "Losses: " + snapshot.losses(),
-                ChatColor.GREEN + "Kills: " + snapshot.kills(),
-                ChatColor.DARK_RED + "Deaths: " + snapshot.deaths(),
-                ChatColor.YELLOW + String.format(java.util.Locale.ROOT, "K/D: %.2f", kd)));
+                ChatColor.YELLOW + message(player, "microbattles.kit.stats.level", snapshot.level()),
+                ChatColor.GOLD + message(player, "microbattles.kit.stats.coins", snapshot.coins()),
+                ChatColor.GREEN + message(player, "microbattles.kit.stats.xp",
+                        snapshot.experience(), snapshot.nextLevelExperience()),
+                ChatColor.BLUE + message(player, "microbattles.kit.stats.wins", snapshot.wins()),
+                ChatColor.RED + message(player, "microbattles.kit.stats.losses", snapshot.losses()),
+                ChatColor.GREEN + message(player, "microbattles.kit.stats.kills", snapshot.kills()),
+                ChatColor.DARK_RED + message(player, "microbattles.kit.stats.deaths", snapshot.deaths()),
+                ChatColor.YELLOW + message(player, "microbattles.kit.stats.kd",
+                        String.format(java.util.Locale.ROOT, "%.2f", kd))));
         item.setItemMeta(meta);
         return item;
     }
 
-    private ItemStack rotationInfo(List<String> rotation) {
+    private ItemStack rotationInfo(Player player, List<String> rotation) {
         ItemStack item = new ItemStack(Material.CLOCK);
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.GOLD + "Weekly Free Rotation");
+        meta.setDisplayName(ChatColor.GOLD + message(player, "microbattles.kit.rotation.title"));
         List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + "Tier I is free to select this week:");
+        lore.add(ChatColor.GRAY + message(player, "microbattles.kit.rotation.detail"));
         rotation.forEach(name -> lore.add(ChatColor.AQUA + "• " + name));
-        lore.add(ChatColor.DARK_GRAY + "Rotation changes every ISO week.");
+        lore.add(ChatColor.DARK_GRAY + message(player, "microbattles.kit.rotation.schedule"));
         meta.setLore(lore);
         item.setItemMeta(meta);
         return item;
@@ -169,17 +185,19 @@ public final class KitSelectionUI implements Listener {
                 : entry.levelReady() && entry.prerequisiteReady() ? ChatColor.YELLOW : ChatColor.RED;
         meta.setDisplayName(ChatColor.RESET + color.toString() + display);
         List<String> lore = new ArrayList<>();
-        if (entry.weekly()) lore.add(ChatColor.GOLD + "★ Weekly free rotation");
-        else if (entry.owned()) lore.add(ChatColor.GREEN + "✓ Owned");
-        else lore.add(ChatColor.GOLD + "Price: " + entry.price() + " coins");
-        if (!entry.levelReady()) lore.add(ChatColor.RED + "Requires level " + entry.requiredLevel());
-        if (!entry.prerequisiteReady()) lore.add(ChatColor.RED + "Unlock the previous tier first");
+        if (entry.weekly()) lore.add(ChatColor.GOLD + message(player, "microbattles.kit.weekly"));
+        else if (entry.owned()) lore.add(ChatColor.GREEN + message(player, "microbattles.kit.owned"));
+        else lore.add(ChatColor.GOLD + message(player, "microbattles.kit.price", entry.price()));
+        if (!entry.levelReady()) lore.add(ChatColor.RED + message(
+                player, "microbattles.kit.requires_level", entry.requiredLevel()));
+        if (!entry.prerequisiteReady()) lore.add(ChatColor.RED + message(
+                player, "microbattles.kit.requires_previous"));
         lore.add("");
         lore.add(ChatColor.GRAY + kitManager.getKitDescription(entry.name(), player));
         lore.add("");
-        lore.add(entry.owned() ? ChatColor.GREEN + "Left-click to select"
-                : ChatColor.YELLOW + "Left-click to purchase");
-        if (entry.level() > 0) lore.add(ChatColor.AQUA + "Right-click to practice-preview");
+        lore.add(entry.owned() ? ChatColor.GREEN + message(player, "microbattles.kit.select")
+                : ChatColor.YELLOW + message(player, "microbattles.kit.purchase"));
+        if (entry.level() > 0) lore.add(ChatColor.AQUA + message(player, "microbattles.kit.preview.action"));
         meta.setLore(lore);
         meta.getPersistentDataContainer().set(kitNameKey, PersistentDataType.STRING, entry.name());
         meta.getPersistentDataContainer().set(kitLevelKey, PersistentDataType.INTEGER, entry.level());
@@ -187,10 +205,10 @@ public final class KitSelectionUI implements Listener {
         return item;
     }
 
-    private ItemStack actionItem(Material material, String name, String action, int page) {
+    private ItemStack actionItem(Player player, Material material, String key, String action, int page) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.YELLOW + name);
+        meta.setDisplayName(ChatColor.YELLOW + message(player, key));
         meta.getPersistentDataContainer().set(actionKey, PersistentDataType.STRING, action);
         meta.getPersistentDataContainer().set(pageKey, PersistentDataType.INTEGER, page);
         item.setItemMeta(meta);
@@ -199,9 +217,10 @@ public final class KitSelectionUI implements Listener {
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        if (!event.getView().getTitle().startsWith(TITLE_PREFIX)) return;
-        event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player)) return;
+        String titlePrefix = titlePrefix(player);
+        if (!event.getView().getTitle().startsWith(titlePrefix)) return;
+        event.setCancelled(true);
         ItemStack clicked = event.getCurrentItem();
         if (clicked == null || !clicked.hasItemMeta()) return;
         ItemMeta meta = clicked.getItemMeta();
@@ -218,34 +237,63 @@ public final class KitSelectionUI implements Listener {
         if (event.isRightClick() && level > 0) {
             player.closeInventory();
             if (!kitManager.previewKit(player, kitName, level)) {
-                player.sendMessage(ChatColor.RED + "Kit preview is only available before your match starts.");
+                player.sendMessage(ChatColor.RED + message(player, "microbattles.kit.preview.unavailable"));
             }
             return;
         }
         if (level == 0) {
-            kitManager.selectKit(player.getUniqueId(), "Default", 0);
-            player.sendMessage(ChatColor.GREEN + "Selected Default.");
             player.closeInventory();
+            mutateSelection(player, "Default", 0, false, currentPage(event.getView().getTitle(), titlePrefix));
             return;
         }
-        MinigameProgressionService service = new MinigameProgressionService(null);
-        if (kitManager.isKitLevelUnlocked(service, player.getUniqueId(), kitName, level)) {
-            kitManager.selectKit(player.getUniqueId(), kitName, level);
-            player.sendMessage(ChatColor.GREEN + "Selected " + kitName + " " + roman(level) + ".");
-            player.closeInventory();
-        } else if (kitManager.purchaseKitLevel(service, player.getUniqueId(), kitName, level)) {
-            kitManager.selectKit(player.getUniqueId(), kitName, level);
-            player.sendMessage(ChatColor.GREEN + "Purchased and selected " + kitName + " " + roman(level) + ".");
-            player.closeInventory();
-        } else {
-            player.sendMessage(ChatColor.RED + "Purchase failed: check your coins, level and previous tier.");
-            openKitSelectionGUI(player, currentPage(event.getView().getTitle()));
-        }
+        player.closeInventory();
+        mutateSelection(player, kitName, level, true, currentPage(event.getView().getTitle(), titlePrefix));
     }
 
-    private int currentPage(String title) {
+    private void mutateSelection(Player player, String kitName, int level, boolean allowPurchase, int page) {
+        UUID playerId = player.getUniqueId();
+        if (!kitManager.tryBeginMutation(playerId)) {
+            player.sendMessage(ChatColor.YELLOW + LocaleManager.getMessage(
+                    "microbattles.kit.action.busy", player.locale()));
+            return;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(MicroBattles.getInstance(), () -> {
+            boolean purchased = false;
+            boolean success = false;
+            try {
+                MinigameProgressionService service = new MinigameProgressionService(null);
+                if (level == 0 || kitManager.isKitLevelUnlocked(service, playerId, kitName, level)) {
+                    kitManager.selectKit(playerId, kitName, level);
+                    success = true;
+                } else if (allowPurchase && kitManager.purchaseKitLevel(service, playerId, kitName, level)) {
+                    kitManager.selectKit(playerId, kitName, level);
+                    purchased = true;
+                    success = true;
+                }
+            } catch (RuntimeException error) {
+                MicroBattles.getInstance().getLogger().warning(
+                        "Could not update MicroBattles kit for " + playerId + ": " + error.getMessage());
+            } finally {
+                kitManager.finishMutation(playerId);
+            }
+            boolean selected = success;
+            boolean bought = purchased;
+            Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
+                if (!player.isOnline()) return;
+                String display = level == 0 ? kitName : kitName + " " + roman(level);
+                String key = selected
+                        ? bought ? "microbattles.kit.action.purchased" : "microbattles.kit.action.selected"
+                        : "microbattles.kit.action.failed";
+                player.sendMessage((selected ? ChatColor.GREEN : ChatColor.RED)
+                        + LocaleManager.getMessage(key, player.locale(), display));
+                if (!selected) openKitSelectionGUI(player, page);
+            });
+        });
+    }
+
+    private int currentPage(String title, String titlePrefix) {
         try {
-            String suffix = title.substring(TITLE_PREFIX.length());
+            String suffix = title.substring(titlePrefix.length());
             return Math.max(0, Integer.parseInt(suffix.split("/", 2)[0]) - 1);
         } catch (RuntimeException ignored) {
             return 0;
@@ -277,6 +325,14 @@ public final class KitSelectionUI implements Listener {
 
     private String roman(int level) {
         return switch (level) { case 1 -> "I"; case 2 -> "II"; case 3 -> "III"; default -> ""; };
+    }
+
+    private static String message(Player player, String key, Object... arguments) {
+        return LocaleManager.getMessage(key, player.locale(), arguments);
+    }
+
+    private static String titlePrefix(Player player) {
+        return ChatColor.DARK_AQUA + message(player, "microbattles.kit.menu.title") + " • ";
     }
 
     private record Entry(String name, int level, boolean owned, boolean weekly, boolean levelReady,

@@ -64,8 +64,9 @@ public class GameMap {
         List<ArenaIntegrity.SpawnSample> samples = new ArrayList<>();
         for (Location spawn : teamSpawns) {
             Chunk chunk = spawn.getChunk();
-            if (!chunk.isLoaded() && !chunk.load(true)) {
-                throw new IllegalStateException("Map " + name + " could not load the chunk for spawn " + spawn);
+            if (!chunk.isLoaded()) {
+                throw new IllegalStateException("Map " + name
+                        + " integrity validation ran before its spawn chunk was preloaded: " + spawn);
             }
 
             boolean hasGround = false;
