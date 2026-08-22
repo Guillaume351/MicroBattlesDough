@@ -11,8 +11,6 @@ import java.util.stream.Collectors;
 import org.bukkit.ChatColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.geysermc.cumulus.form.CustomForm;
-import org.geysermc.cumulus.form.ModalForm;
 import org.geysermc.cumulus.form.SimpleForm;
 import org.geysermc.floodgate.api.FloodgateApi;
 import org.geysermc.floodgate.api.player.FloodgatePlayer;
@@ -25,6 +23,7 @@ import com.cookiebuild.microbattles.kits.KitLevel;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.kits.TieredKit;
 import com.cookiebuild.microbattles.ui.KitDisplayInfo;
+import com.cookiebuild.cookiedough.ui.BedrockFormImages;
 
 public class BedrockKitSelectionUI {
 
@@ -78,36 +77,31 @@ public class BedrockKitSelectionUI {
                 .title("§l§9" + message(player, "microbattles.kit.menu.title"))
                 .content(statsContent);
 
-        // Add owned kits to main menu
-        if (!ownedKits.isEmpty()) {
-            formBuilder.button("§a§l--- " + message(player, "microbattles.kit.your_kits") + " ---");
-            ownedKits.forEach(kit -> formBuilder.button(createOwnedKitButtonText(kit)));
-        }
-
-        // Add shop button
-        formBuilder.button("§e§l🏪 " + message(player, "microbattles.kit.shop.title"));
-
-        // Create buttons list for handling clicks
+        // Each kit is an actionable row; headings live in content instead of becoming fake buttons.
         List<KitDisplayInfo> buttonMapping = new ArrayList<>();
-        buttonMapping.add(null); // Separator "Your Kits"
-        buttonMapping.addAll(ownedKits);
-        buttonMapping.add(null); // Shop button
+        ownedKits.forEach(kit -> {
+            BedrockFormImages.button(formBuilder, createOwnedKitButtonText(kit), imageId(kit.kitName));
+            buttonMapping.add(kit);
+        });
+        int shopIndex = buttonMapping.size();
+        BedrockFormImages.button(formBuilder, "§e§l🏪 " + message(player, "microbattles.kit.shop.title"),
+                "actions/shop");
+        buttonMapping.add(null);
+        int closeIndex = buttonMapping.size();
+        BedrockFormImages.button(formBuilder, "§c§l" + message(player, "microbattles.kit.close"),
+                "actions/close");
+        buttonMapping.add(null);
 
         formBuilder.validResultHandler(response -> {
             int buttonId = response.getClickedButtonId();
 
-            if (buttonId == buttonMapping.size() - 1) {
-                // Shop button clicked
+            if (buttonId == shopIndex) {
                 openShopMenu(player);
-            } else if (buttonId > 0 && buttonId < buttonMapping.size() - 1) {
-                // Kit selected
+            } else if (buttonId != closeIndex && buttonId >= 0 && buttonId < buttonMapping.size()) {
                 KitDisplayInfo selectedKit = buttonMapping.get(buttonId);
                 if (selectedKit != null) {
                     handleKitSelection(player, selectedKit);
                 }
-            } else {
-                // Separator clicked, reopen menu
-                open(player);
             }
         });
 
@@ -161,28 +155,22 @@ public class BedrockKitSelectionUI {
         List<KitDisplayInfo> buttonMapping = new ArrayList<>();
 
         // Add back button at the top for easy access
-        formBuilder.button("§f§l⬅ §9§l" + message(player, "microbattles.kit.shop.back"));
+        BedrockFormImages.button(formBuilder, "§f§l⬅ §9§l" + message(player, "microbattles.kit.shop.back"),
+                "actions/back");
         buttonMapping.add(null); // Back button
 
-        // Add available kits
-        if (!availableKits.isEmpty()) {
-            formBuilder.button("§e§l--- " + message(player, "microbattles.kit.shop.available") + " ---");
-            buttonMapping.add(null); // Separator
-            availableKits.forEach(kit -> {
-                formBuilder.button(createShopKitButtonText(kit));
-                buttonMapping.add(kit);
-            });
-        }
-
-        // Add locked kits
-        if (!lockedKits.isEmpty()) {
-            formBuilder.button("§c§l--- " + message(player, "microbattles.kit.shop.locked") + " ---");
-            buttonMapping.add(null); // Separator
-            lockedKits.forEach(kit -> {
-                formBuilder.button(createShopKitButtonText(kit));
-                buttonMapping.add(kit);
-            });
-        }
+        availableKits.forEach(kit -> {
+            BedrockFormImages.button(formBuilder, createShopKitButtonText(kit), imageId(kit.kitName));
+            buttonMapping.add(kit);
+        });
+        lockedKits.forEach(kit -> {
+            BedrockFormImages.button(formBuilder, createShopKitButtonText(kit), imageId(kit.kitName));
+            buttonMapping.add(kit);
+        });
+        int closeIndex = buttonMapping.size();
+        BedrockFormImages.button(formBuilder, "§c§l" + message(player, "microbattles.kit.close"),
+                "actions/close");
+        buttonMapping.add(null);
 
         formBuilder.validResultHandler(response -> {
             int buttonId = response.getClickedButtonId();
@@ -190,13 +178,10 @@ public class BedrockKitSelectionUI {
             if (buttonId == 0) {
                 // Back button clicked (now at top)
                 open(player);
-            } else {
+            } else if (buttonId != closeIndex && buttonId >= 0 && buttonId < buttonMapping.size()) {
                 KitDisplayInfo selectedKit = buttonMapping.get(buttonId);
                 if (selectedKit != null) {
                     handleShopKitSelection(player, selectedKit);
-                } else {
-                    // Separator clicked, reopen shop
-                    openShopMenu(player);
                 }
             }
         });
@@ -230,24 +215,29 @@ public class BedrockKitSelectionUI {
             mutateKit(player, kitInfo, false, false);
             return;
         }
-        ModalForm form = ModalForm.builder()
+        SimpleForm.Builder form = SimpleForm.builder()
                 .title("§l§9" + displayName)
                 .content(kitManager.getKitDescription(kitInfo.kitName, player)
                         + "\n\n" + message(player, "microbattles.kit.preview.detail"))
-                .button1("§a§l" + message(player, "microbattles.kit.select.button"))
-                .button2("§b§l" + message(player, "microbattles.kit.preview.button"))
                 .validResultHandler(response -> {
                     if (response.getClickedButtonId() == 0) {
                         mutateKit(player, kitInfo, false, false);
-                    } else {
+                    } else if (response.getClickedButtonId() == 1) {
                         Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
                             if (!kitManager.previewKit(player, kitInfo.kitName, kitInfo.level)) {
                                 player.sendMessage(ChatColor.RED + message(
                                         player, "microbattles.kit.preview.unavailable"));
                             }
                         });
+                    } else {
+                        open(player);
                     }
-                }).build();
+                });
+        BedrockFormImages.button(form, "§a§l" + message(player, "microbattles.kit.select.button"),
+                imageId(kitInfo.kitName));
+        BedrockFormImages.button(form, "§b§l" + message(player, "microbattles.kit.preview.button"),
+                "actions/preview");
+        BedrockFormImages.button(form, "§f§l" + message(player, "microbattles.kit.back"), "actions/back");
         sendForm(player, form);
     }
 
@@ -265,12 +255,14 @@ public class BedrockKitSelectionUI {
                         + (purchasable ? "" : "\n§c" + message(
                                 player, "microbattles.kit.requirements_not_met")));
         if (purchasable) {
-            builder.button("§a§l" + message(player, "microbattles.kit.purchase_select"));
+            BedrockFormImages.button(builder, "§a§l" + message(player, "microbattles.kit.purchase_select"),
+                    "actions/purchase");
             actions.add("purchase");
         }
-        builder.button("§b§l" + message(player, "microbattles.kit.preview.button"));
+        BedrockFormImages.button(builder, "§b§l" + message(player, "microbattles.kit.preview.button"),
+                "actions/preview");
         actions.add("preview");
-        builder.button("§f§l" + message(player, "microbattles.kit.back"));
+        BedrockFormImages.button(builder, "§f§l" + message(player, "microbattles.kit.back"), "actions/back");
         actions.add("back");
         builder.validResultHandler(response -> {
                     String action = actions.get(response.getClickedButtonId());
@@ -328,6 +320,29 @@ public class BedrockKitSelectionUI {
         return LocaleManager.getMessage(key, player.locale(), arguments);
     }
 
+    static String imageId(String kitName) {
+        return switch (kitName) {
+            case "Default" -> "kits/microbattles/default";
+            case "Explosive Archer" -> "kits/microbattles/explosive_archer";
+            case "Enderman" -> "kits/microbattles/enderman";
+            case "Knockback Warrior" -> "kits/microbattles/knockback_warrior";
+            case "Tank" -> "kits/microbattles/tank";
+            case "Ninja" -> "kits/microbattles/ninja";
+            case "Archer" -> "kits/microbattles/archer";
+            case "Berserker" -> "kits/microbattles/berserker";
+            case "Chemist" -> "kits/microbattles/chemist";
+            case "Assassin" -> "kits/microbattles/assassin";
+            case "Miner" -> "kits/microbattles/miner";
+            case "Vampire" -> "kits/microbattles/vampire";
+            case "Frost Mage" -> "kits/microbattles/frost_mage";
+            case "Juggernaut" -> "kits/microbattles/juggernaut";
+            case "Trapper" -> "kits/microbattles/trapper";
+            case "Alchemist" -> "kits/microbattles/alchemist";
+            case "Mobility" -> "kits/microbattles/mobility";
+            default -> "modes/microbattles";
+        };
+    }
+
     private List<KitDisplayInfo> getKitDisplayInfos(Player player) {
         UUID playerId = player.getUniqueId();
         var progression = minigameStatsService.getOrCreateStats(playerId,
@@ -373,15 +388,4 @@ public class BedrockKitSelectionUI {
             fgPlayer.sendForm(form.build());
     }
 
-    private void sendForm(Player player, CustomForm form) {
-        FloodgatePlayer fgPlayer = FloodgateApi.getInstance().getPlayer(player.getUniqueId());
-        if (fgPlayer != null)
-            fgPlayer.sendForm(form);
-    }
-
-    private void sendForm(Player player, ModalForm form) {
-        FloodgatePlayer fgPlayer = FloodgateApi.getInstance().getPlayer(player.getUniqueId());
-        if (fgPlayer != null)
-            fgPlayer.sendForm(form);
-    }
 }

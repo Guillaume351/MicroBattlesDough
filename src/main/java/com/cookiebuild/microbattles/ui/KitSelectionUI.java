@@ -15,6 +15,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -126,8 +127,10 @@ public final class KitSelectionUI implements Listener {
     private void render(Player player, MenuSnapshot snapshot, int requestedPage) {
         int pageCount = KitPagination.pageCount(snapshot.entries().size(), PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pageCount - 1));
-        Inventory inventory = Bukkit.createInventory(null, 54,
+        KitMenuHolder holder = new KitMenuHolder(player.getUniqueId(), page);
+        Inventory inventory = Bukkit.createInventory(holder, 54,
                 titlePrefix(player) + (page + 1) + "/" + pageCount);
+        holder.bind(inventory);
         inventory.setItem(4, playerInfo(player, snapshot));
         inventory.setItem(7, rotationInfo(player, snapshot.rotation()));
 
@@ -218,8 +221,8 @@ public final class KitSelectionUI implements Listener {
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
-        String titlePrefix = titlePrefix(player);
-        if (!event.getView().getTitle().startsWith(titlePrefix)) return;
+        if (!(event.getView().getTopInventory().getHolder() instanceof KitMenuHolder holder)
+                || !holder.playerId().equals(player.getUniqueId())) return;
         event.setCancelled(true);
         ItemStack clicked = event.getCurrentItem();
         if (clicked == null || !clicked.hasItemMeta()) return;
@@ -243,11 +246,22 @@ public final class KitSelectionUI implements Listener {
         }
         if (level == 0) {
             player.closeInventory();
-            mutateSelection(player, "Default", 0, false, currentPage(event.getView().getTitle(), titlePrefix));
+            mutateSelection(player, "Default", 0, false, holder.page());
             return;
         }
         player.closeInventory();
-        mutateSelection(player, kitName, level, true, currentPage(event.getView().getTitle(), titlePrefix));
+        mutateSelection(player, kitName, level, true, holder.page());
+    }
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getView().getTopInventory().getHolder() instanceof KitMenuHolder)) return;
+        int topSize = event.getView().getTopInventory().getSize();
+        if (dragTouchesTop(event.getRawSlots(), topSize)) event.setCancelled(true);
+    }
+
+    static boolean dragTouchesTop(java.util.Set<Integer> rawSlots, int topSize) {
+        return rawSlots.stream().anyMatch(slot -> slot >= 0 && slot < topSize);
     }
 
     private void mutateSelection(Player player, String kitName, int level, boolean allowPurchase, int page) {
@@ -289,15 +303,6 @@ public final class KitSelectionUI implements Listener {
                 if (!selected) openKitSelectionGUI(player, page);
             });
         });
-    }
-
-    private int currentPage(String title, String titlePrefix) {
-        try {
-            String suffix = title.substring(titlePrefix.length());
-            return Math.max(0, Integer.parseInt(suffix.split("/", 2)[0]) - 1);
-        } catch (RuntimeException ignored) {
-            return 0;
-        }
     }
 
     private Material getKitMaterial(String name) {
