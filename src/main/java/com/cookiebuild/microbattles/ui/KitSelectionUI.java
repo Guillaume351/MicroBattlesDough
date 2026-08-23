@@ -16,6 +16,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -32,6 +33,7 @@ import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.kits.TieredKit;
 import com.cookiebuild.microbattles.ui.bedrock.BedrockKitSelectionUI;
 import com.cookiebuild.microbattles.ui.bedrock.BedrockUIHelper;
+import com.cookiebuild.cookiedough.ui.MenuLore;
 
 /** Paginated Java selector with stable item metadata and async snapshot loading. */
 public final class KitSelectionUI implements Listener {
@@ -172,9 +174,9 @@ public final class KitSelectionUI implements Listener {
         ItemMeta meta = item.getItemMeta();
         meta.setDisplayName(ChatColor.GOLD + message(player, "microbattles.kit.rotation.title"));
         List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + message(player, "microbattles.kit.rotation.detail"));
+        lore.add(MenuLore.legacyDetail(message(player, "microbattles.kit.rotation.detail")));
         rotation.forEach(name -> lore.add(ChatColor.AQUA + "• " + name));
-        lore.add(ChatColor.DARK_GRAY + message(player, "microbattles.kit.rotation.schedule"));
+        lore.add(MenuLore.legacyDetail(message(player, "microbattles.kit.rotation.schedule")));
         meta.setLore(lore);
         item.setItemMeta(meta);
         return item;
@@ -196,7 +198,7 @@ public final class KitSelectionUI implements Listener {
         if (!entry.prerequisiteReady()) lore.add(ChatColor.RED + message(
                 player, "microbattles.kit.requires_previous"));
         lore.add("");
-        lore.add(ChatColor.GRAY + kitManager.getKitDescription(entry.name(), player));
+        lore.add(MenuLore.legacyDetail(kitManager.getKitDescription(entry.name(), player)));
         lore.add("");
         lore.add(entry.owned() ? ChatColor.GREEN + message(player, "microbattles.kit.select")
                 : ChatColor.YELLOW + message(player, "microbattles.kit.purchase"));
@@ -258,6 +260,12 @@ public final class KitSelectionUI implements Listener {
         if (!(event.getView().getTopInventory().getHolder() instanceof KitMenuHolder)) return;
         int topSize = event.getView().getTopInventory().getSize();
         if (dragTouchesTop(event.getRawSlots(), topSize)) event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        menuLoads.remove(event.getPlayer().getUniqueId());
+        bedrockKitSelectionUI.invalidate(event.getPlayer());
     }
 
     static boolean dragTouchesTop(java.util.Set<Integer> rawSlots, int topSize) {

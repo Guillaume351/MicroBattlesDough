@@ -16,6 +16,7 @@ import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.ui.KitSelectionUI;
+import com.cookiebuild.cookiedough.ui.MenuLore;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -60,9 +61,9 @@ public class KitSelectorListener implements Listener {
         if (meta != null) {
             meta.setDisplayName(KIT_SELECTOR_NAME);
             meta.setLore(List.of(
-                    "§7Right-click to select your kit",
-                    "§7Choose from available kits",
-                    "§7and their different tiers"));
+                    MenuLore.legacyDetail("Right-click to select your kit"),
+                    MenuLore.legacyDetail("Choose from available kits"),
+                    MenuLore.legacyDetail("and their different tiers")));
             meta.getPersistentDataContainer().set(
                     MicroBattles.getInstance().getKitSelectorKey(), PersistentDataType.BYTE, (byte) 1);
             kitSelector.setItemMeta(meta);

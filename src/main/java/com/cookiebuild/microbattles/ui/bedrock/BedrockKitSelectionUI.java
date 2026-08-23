@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.bukkit.ChatColor;
@@ -23,13 +24,17 @@ import com.cookiebuild.microbattles.kits.KitLevel;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.kits.TieredKit;
 import com.cookiebuild.microbattles.ui.KitDisplayInfo;
+import com.cookiebuild.cookiedough.ui.BedrockButtonText;
 import com.cookiebuild.cookiedough.ui.BedrockFormImages;
+import com.cookiebuild.cookiedough.ui.BedrockMenuSessionRegistry;
+import com.cookiebuild.cookiedough.ui.MainThreadPlayerAction;
 
 public class BedrockKitSelectionUI {
 
     private final KitManager kitManager;
     private final MinigameProgressionService minigameStatsService;
     private final Set<UUID> menuLoads = ConcurrentHashMap.newKeySet();
+    private final BedrockMenuSessionRegistry sessions = new BedrockMenuSessionRegistry();
 
     public BedrockKitSelectionUI(KitManager kitManager, MinigameProgressionService minigameStatsService) {
         this.kitManager = kitManager;
@@ -38,6 +43,14 @@ public class BedrockKitSelectionUI {
     }
 
     public void open(Player player) {
+        if (!Bukkit.isPrimaryThread()) {
+            Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> open(player));
+            return;
+        }
+        loadMenu(player, "kit menu", snapshot -> renderMainMenu(player, snapshot));
+    }
+
+    private void loadMenu(Player player, String operation, Consumer<MenuSnapshot> renderer) {
         UUID playerId = player.getUniqueId();
         if (!menuLoads.add(playerId)) {
             player.sendMessage(ChatColor.YELLOW + message(player, "microbattles.kit.menu.loading"));
@@ -45,34 +58,47 @@ public class BedrockKitSelectionUI {
         }
         Bukkit.getScheduler().runTaskAsynchronously(MicroBattles.getInstance(), () -> {
             try {
-                renderMainMenu(player);
+                MenuSnapshot snapshot = loadSnapshot(playerId);
+                Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
+                    try {
+                        if (renderEligible(Bukkit.isPrimaryThread(), player.isOnline())) renderer.accept(snapshot);
+                    } catch (RuntimeException error) {
+                        reportLoadFailure(player, playerId, operation, error);
+                    } finally {
+                        menuLoads.remove(playerId);
+                    }
+                });
             } catch (RuntimeException error) {
-                MicroBattles.getInstance().getLogger().warning(
-                        "Could not load Bedrock kit menu for " + playerId + ": " + error.getMessage());
-                Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () ->
-                        player.sendMessage(ChatColor.RED + message(player, "microbattles.kit.menu.failed")));
-            } finally {
-                menuLoads.remove(playerId);
+                Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
+                    try {
+                        reportLoadFailure(player, playerId, operation, error);
+                    } finally {
+                        menuLoads.remove(playerId);
+                    }
+                });
             }
         });
     }
 
-    private void renderMainMenu(Player player) {
-        // --- Get Player Stats ---
-        UUID playerId = player.getUniqueId();
-        int playerLevel = minigameStatsService.getLevel(playerId, MinigameProgressionService.MICROBATTLES);
+    private MenuSnapshot loadSnapshot(UUID playerId) {
         int playerCoins = minigameStatsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES);
         com.cookiebuild.cookiedough.model.MinigameProgression progressionStats = minigameStatsService
                 .getOrCreateStats(playerId, MinigameProgressionService.MICROBATTLES);
-        int playerXp = progressionStats.getExperience();
-        int xpForNextLevel = progressionStats.getExperienceForNextLevel();
-        String statsContent = message(player, "microbattles.kit.bedrock.stats", playerLevel, playerCoins,
-                playerXp, xpForNextLevel, String.join(" §7/ §b", kitManager.getWeeklyFreeKits()));
+        return new MenuSnapshot(progressionStats.getLevel(), playerCoins, progressionStats.getExperience(),
+                progressionStats.getExperienceForNextLevel(), List.copyOf(kitManager.getWeeklyFreeKits()),
+                getKitDisplayInfos(progressionStats, playerCoins));
+    }
 
-        // --- Get and Filter Kits ---
-        List<KitDisplayInfo> allKits = getKitDisplayInfos(player);
-        List<KitDisplayInfo> ownedKits = allKits.stream().filter(k -> k.unlocked).collect(Collectors.toList());
+    private void renderMainMenu(Player player, MenuSnapshot snapshot) {
+        UUID playerId = player.getUniqueId();
+        String statsContent = message(player, "microbattles.kit.bedrock.stats", snapshot.playerLevel(),
+                snapshot.playerCoins(), snapshot.playerXp(), snapshot.xpForNextLevel(),
+                String.join(" / ", snapshot.weeklyFreeKits()));
+        List<KitDisplayInfo> ownedKits = snapshot.kits().stream()
+                .filter(k -> k.unlocked).collect(Collectors.toList());
 
+        String scope = "microbattles:kits";
+        UUID nonce = sessions.issue(playerId, scope);
         SimpleForm.Builder formBuilder = SimpleForm.builder()
                 .title("§l§9" + message(player, "microbattles.kit.menu.title"))
                 .content(statsContent);
@@ -80,73 +106,58 @@ public class BedrockKitSelectionUI {
         // Each kit is an actionable row; headings live in content instead of becoming fake buttons.
         List<KitDisplayInfo> buttonMapping = new ArrayList<>();
         ownedKits.forEach(kit -> {
-            BedrockFormImages.button(formBuilder, createOwnedKitButtonText(kit), imageId(kit.kitName));
+            BedrockFormImages.button(formBuilder, createOwnedKitButtonText(player, kit), imageId(kit.kitName));
             buttonMapping.add(kit);
         });
         int shopIndex = buttonMapping.size();
-        BedrockFormImages.button(formBuilder, "§e§l🏪 " + message(player, "microbattles.kit.shop.title"),
+        BedrockFormImages.button(formBuilder, BedrockButtonText.format(
+                        message(player, "microbattles.kit.shop.title")),
                 "actions/shop");
         buttonMapping.add(null);
         int closeIndex = buttonMapping.size();
-        BedrockFormImages.button(formBuilder, "§c§l" + message(player, "microbattles.kit.close"),
+        BedrockFormImages.button(formBuilder, BedrockButtonText.format(
+                        message(player, "microbattles.kit.close")),
                 "actions/close");
         buttonMapping.add(null);
 
         formBuilder.validResultHandler(response -> {
             int buttonId = response.getClickedButtonId();
 
-            if (buttonId == shopIndex) {
-                openShopMenu(player);
-            } else if (buttonId != closeIndex && buttonId >= 0 && buttonId < buttonMapping.size()) {
-                KitDisplayInfo selectedKit = buttonMapping.get(buttonId);
-                if (selectedKit != null) {
-                    handleKitSelection(player, selectedKit);
+            MainThreadPlayerAction.dispatch(MicroBattles.getInstance(), player, () -> {
+                if (!sessions.consume(playerId, nonce, scope)) return;
+                if (buttonId == shopIndex) {
+                    openShopMenu(player);
+                } else if (buttonId != closeIndex && buttonId >= 0 && buttonId < buttonMapping.size()) {
+                    KitDisplayInfo selectedKit = buttonMapping.get(buttonId);
+                    if (selectedKit != null) handleKitSelection(player, selectedKit);
                 }
-            }
+            });
         });
-
-        sendForm(player, formBuilder);
+        formBuilder.closedOrInvalidResultHandler(() -> sessions.invalidate(playerId, nonce, scope));
+        if (!sendForm(player, formBuilder)) sessions.invalidate(playerId, nonce, scope);
     }
 
     private void openShopMenu(Player player) {
-        UUID playerId = player.getUniqueId();
-        if (!menuLoads.add(playerId)) {
-            player.sendMessage(ChatColor.YELLOW + message(player, "microbattles.kit.menu.loading"));
+        if (!Bukkit.isPrimaryThread()) {
+            Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> openShopMenu(player));
             return;
         }
-        Bukkit.getScheduler().runTaskAsynchronously(MicroBattles.getInstance(), () -> {
-            try {
-                renderShopMenu(player);
-            } catch (RuntimeException error) {
-                MicroBattles.getInstance().getLogger().warning(
-                        "Could not load Bedrock kit shop for " + playerId + ": " + error.getMessage());
-                Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () ->
-                        player.sendMessage(ChatColor.RED + message(player, "microbattles.kit.menu.failed")));
-            } finally {
-                menuLoads.remove(playerId);
-            }
-        });
+        loadMenu(player, "kit shop", snapshot -> renderShopMenu(player, snapshot));
     }
 
-    private void renderShopMenu(Player player) {
-        // --- Get Player Stats ---
+    private void renderShopMenu(Player player, MenuSnapshot snapshot) {
         UUID playerId = player.getUniqueId();
-        int playerLevel = minigameStatsService.getLevel(playerId, MinigameProgressionService.MICROBATTLES);
-        int playerCoins = minigameStatsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES);
-        com.cookiebuild.cookiedough.model.MinigameProgression progressionStats = minigameStatsService
-                .getOrCreateStats(playerId, MinigameProgressionService.MICROBATTLES);
-        int playerXp = progressionStats.getExperience();
-        int xpForNextLevel = progressionStats.getExperienceForNextLevel();
         String statsContent = message(player, "microbattles.kit.bedrock.shop_stats",
-                playerLevel, playerCoins, playerXp, xpForNextLevel);
+                snapshot.playerLevel(), snapshot.playerCoins(), snapshot.playerXp(), snapshot.xpForNextLevel());
 
-        // --- Get, Filter, and Sort Kits ---
-        List<KitDisplayInfo> allKits = getKitDisplayInfos(player);
+        List<KitDisplayInfo> allKits = snapshot.kits();
         List<KitDisplayInfo> availableKits = allKits.stream().filter(k -> !k.unlocked && k.hasLevel && k.canAfford)
                 .collect(Collectors.toList());
         List<KitDisplayInfo> lockedKits = allKits.stream().filter(k -> !k.unlocked && (!k.hasLevel || !k.canAfford))
                 .collect(Collectors.toList());
 
+        String scope = "microbattles:shop";
+        UUID nonce = sessions.issue(playerId, scope);
         SimpleForm.Builder formBuilder = SimpleForm.builder()
                 .title("§l§6" + message(player, "microbattles.kit.shop.title"))
                 .content(statsContent);
@@ -155,56 +166,59 @@ public class BedrockKitSelectionUI {
         List<KitDisplayInfo> buttonMapping = new ArrayList<>();
 
         // Add back button at the top for easy access
-        BedrockFormImages.button(formBuilder, "§f§l⬅ §9§l" + message(player, "microbattles.kit.shop.back"),
+        BedrockFormImages.button(formBuilder, BedrockButtonText.format(
+                        message(player, "microbattles.kit.shop.back")),
                 "actions/back");
         buttonMapping.add(null); // Back button
 
         availableKits.forEach(kit -> {
-            BedrockFormImages.button(formBuilder, createShopKitButtonText(kit), imageId(kit.kitName));
+            BedrockFormImages.button(formBuilder, createShopKitButtonText(player, kit), imageId(kit.kitName));
             buttonMapping.add(kit);
         });
         lockedKits.forEach(kit -> {
-            BedrockFormImages.button(formBuilder, createShopKitButtonText(kit), imageId(kit.kitName));
+            BedrockFormImages.button(formBuilder, createShopKitButtonText(player, kit), imageId(kit.kitName));
             buttonMapping.add(kit);
         });
         int closeIndex = buttonMapping.size();
-        BedrockFormImages.button(formBuilder, "§c§l" + message(player, "microbattles.kit.close"),
+        BedrockFormImages.button(formBuilder, BedrockButtonText.format(
+                        message(player, "microbattles.kit.close")),
                 "actions/close");
         buttonMapping.add(null);
 
         formBuilder.validResultHandler(response -> {
             int buttonId = response.getClickedButtonId();
 
-            if (buttonId == 0) {
-                // Back button clicked (now at top)
-                open(player);
-            } else if (buttonId != closeIndex && buttonId >= 0 && buttonId < buttonMapping.size()) {
-                KitDisplayInfo selectedKit = buttonMapping.get(buttonId);
-                if (selectedKit != null) {
-                    handleShopKitSelection(player, selectedKit);
+            MainThreadPlayerAction.dispatch(MicroBattles.getInstance(), player, () -> {
+                if (!sessions.consume(playerId, nonce, scope)) return;
+                if (buttonId == 0) {
+                    open(player);
+                } else if (buttonId != closeIndex && buttonId >= 0 && buttonId < buttonMapping.size()) {
+                    KitDisplayInfo selectedKit = buttonMapping.get(buttonId);
+                    if (selectedKit != null) handleShopKitSelection(player, selectedKit);
                 }
-            }
+            });
         });
-
-        sendForm(player, formBuilder);
+        formBuilder.closedOrInvalidResultHandler(() -> sessions.invalidate(playerId, nonce, scope));
+        if (!sendForm(player, formBuilder)) sessions.invalidate(playerId, nonce, scope);
     }
 
-    private String createOwnedKitButtonText(KitDisplayInfo kit) {
+    private String createOwnedKitButtonText(Player player, KitDisplayInfo kit) {
         String displayName = kit.level == 0 ? kit.kitName : kit.kitLevel.getDisplayName(kit.kitName);
         String rotation = kit.level == 1 && kitManager.isWeeklyFreeKit(kit.kitName) ? " §6★" : "";
-        return "§a§l✓ §r§f§l" + displayName + rotation;
+        return BedrockButtonText.format("✓ " + displayName + rotation,
+                message(player, "microbattles.kit.select"));
     }
 
-    private String createShopKitButtonText(KitDisplayInfo kit) {
+    private String createShopKitButtonText(Player player, KitDisplayInfo kit) {
         String displayName = kit.level == 0 ? kit.kitName : kit.kitLevel.getDisplayName(kit.kitName);
         if (kit.hasLevel && kit.canAfford) {
-            return "§e§l" + displayName + "\n§f§l"
-                    + message(kit.player, "microbattles.kit.price", kit.kitLevel.getPrice());
+            return BedrockButtonText.format(displayName,
+                    message(player, "microbattles.kit.price", kit.kitLevel.getPrice()));
         } else {
             String requirement = !kit.hasLevel
-                    ? message(kit.player, "microbattles.kit.requires_level", kit.kitLevel.getRequiredLevel())
-                    : message(kit.player, "microbattles.kit.not_enough_coins");
-            return "§c§l" + displayName + "\n§8§l" + requirement;
+                    ? message(player, "microbattles.kit.requires_level", kit.kitLevel.getRequiredLevel())
+                    : message(player, "microbattles.kit.not_enough_coins");
+            return BedrockButtonText.format("[LOCKED] " + displayName, requirement);
         }
     }
 
@@ -215,30 +229,37 @@ public class BedrockKitSelectionUI {
             mutateKit(player, kitInfo, false, false);
             return;
         }
+        String scope = "microbattles:kit:" + imageId(kitInfo.kitName) + ":" + kitInfo.level;
+        UUID nonce = sessions.issue(player.getUniqueId(), scope);
         SimpleForm.Builder form = SimpleForm.builder()
                 .title("§l§9" + displayName)
                 .content(kitManager.getKitDescription(kitInfo.kitName, player)
                         + "\n\n" + message(player, "microbattles.kit.preview.detail"))
                 .validResultHandler(response -> {
-                    if (response.getClickedButtonId() == 0) {
-                        mutateKit(player, kitInfo, false, false);
-                    } else if (response.getClickedButtonId() == 1) {
-                        Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
+                    int index = response.getClickedButtonId();
+                    MainThreadPlayerAction.dispatch(MicroBattles.getInstance(), player, () -> {
+                        if (!sessions.consume(player.getUniqueId(), nonce, scope)) return;
+                        if (index == 0) {
+                            mutateKit(player, kitInfo, false, false);
+                        } else if (index == 1) {
                             if (!kitManager.previewKit(player, kitInfo.kitName, kitInfo.level)) {
                                 player.sendMessage(ChatColor.RED + message(
                                         player, "microbattles.kit.preview.unavailable"));
                             }
-                        });
-                    } else {
-                        open(player);
-                    }
+                        } else if (index == 2) open(player);
+                    });
                 });
-        BedrockFormImages.button(form, "§a§l" + message(player, "microbattles.kit.select.button"),
+        form.closedOrInvalidResultHandler(() ->
+                sessions.invalidate(player.getUniqueId(), nonce, scope));
+        BedrockFormImages.button(form, BedrockButtonText.format(
+                        message(player, "microbattles.kit.select.button")),
                 imageId(kitInfo.kitName));
-        BedrockFormImages.button(form, "§b§l" + message(player, "microbattles.kit.preview.button"),
+        BedrockFormImages.button(form, BedrockButtonText.format(
+                        message(player, "microbattles.kit.preview.button")),
                 "actions/preview");
-        BedrockFormImages.button(form, "§f§l" + message(player, "microbattles.kit.back"), "actions/back");
-        sendForm(player, form);
+        BedrockFormImages.button(form, BedrockButtonText.format(message(player, "microbattles.kit.back")),
+                "actions/back");
+        if (!sendForm(player, form)) sessions.invalidate(player.getUniqueId(), nonce, scope);
     }
 
     private void handleShopKitSelection(Player player, KitDisplayInfo kitInfo) {
@@ -248,6 +269,8 @@ public class BedrockKitSelectionUI {
     private void openPurchaseConfirmationForm(Player player, KitDisplayInfo kitInfo) {
         boolean purchasable = kitInfo.hasLevel && kitInfo.canAfford;
         List<String> actions = new ArrayList<>();
+        String scope = "microbattles:purchase:" + imageId(kitInfo.kitName) + ":" + kitInfo.level;
+        UUID nonce = sessions.issue(player.getUniqueId(), scope);
         SimpleForm.Builder builder = SimpleForm.builder()
                 .title("§l§e" + kitInfo.kitLevel.getDisplayName(kitInfo.kitName))
                 .content(kitManager.getKitDescription(kitInfo.kitName, player) + "\n\n§6"
@@ -255,31 +278,37 @@ public class BedrockKitSelectionUI {
                         + (purchasable ? "" : "\n§c" + message(
                                 player, "microbattles.kit.requirements_not_met")));
         if (purchasable) {
-            BedrockFormImages.button(builder, "§a§l" + message(player, "microbattles.kit.purchase_select"),
+            BedrockFormImages.button(builder, BedrockButtonText.format(
+                            message(player, "microbattles.kit.purchase_select")),
                     "actions/purchase");
             actions.add("purchase");
         }
-        BedrockFormImages.button(builder, "§b§l" + message(player, "microbattles.kit.preview.button"),
+        BedrockFormImages.button(builder, BedrockButtonText.format(
+                        message(player, "microbattles.kit.preview.button")),
                 "actions/preview");
         actions.add("preview");
-        BedrockFormImages.button(builder, "§f§l" + message(player, "microbattles.kit.back"), "actions/back");
+        BedrockFormImages.button(builder, BedrockButtonText.format(message(player, "microbattles.kit.back")),
+                "actions/back");
         actions.add("back");
         builder.validResultHandler(response -> {
-                    String action = actions.get(response.getClickedButtonId());
-                    if (action.equals("purchase")) {
-                        mutateKit(player, kitInfo, true, true);
-                    } else if (action.equals("preview")) {
-                        Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
+                    int index = response.getClickedButtonId();
+                    MainThreadPlayerAction.dispatch(MicroBattles.getInstance(), player, () -> {
+                        if (!sessions.consume(player.getUniqueId(), nonce, scope)
+                                || index < 0 || index >= actions.size()) return;
+                        String action = actions.get(index);
+                        if (action.equals("purchase")) {
+                            mutateKit(player, kitInfo, true, true);
+                        } else if (action.equals("preview")) {
                             if (!kitManager.previewKit(player, kitInfo.kitName, kitInfo.level)) {
                                 player.sendMessage(ChatColor.RED + message(
                                         player, "microbattles.kit.preview.unavailable"));
                             }
-                        });
-                    } else {
-                        openShopMenu(player);
-                    }
+                        } else openShopMenu(player);
+                    });
                 });
-        sendForm(player, builder);
+        builder.closedOrInvalidResultHandler(() ->
+                sessions.invalidate(player.getUniqueId(), nonce, scope));
+        if (!sendForm(player, builder)) sessions.invalidate(player.getUniqueId(), nonce, scope);
     }
 
     private void mutateKit(Player player, KitDisplayInfo kitInfo, boolean purchase, boolean reopenShop) {
@@ -343,16 +372,13 @@ public class BedrockKitSelectionUI {
         };
     }
 
-    private List<KitDisplayInfo> getKitDisplayInfos(Player player) {
-        UUID playerId = player.getUniqueId();
-        var progression = minigameStatsService.getOrCreateStats(playerId,
-                MinigameProgressionService.MICROBATTLES);
-        int coins = minigameStatsService.getCoins(playerId, MinigameProgressionService.MICROBATTLES);
+    private List<KitDisplayInfo> getKitDisplayInfos(
+            com.cookiebuild.cookiedough.model.MinigameProgression progression, int coins) {
         List<KitDisplayInfo> kits = new ArrayList<>();
         Kit defaultKit = kitManager.getOriginalKit("Default");
 
         if (defaultKit != null) {
-            kits.add(new KitDisplayInfo(defaultKit.getName(), 0, true, true, true, defaultKit, player));
+            kits.add(new KitDisplayInfo(defaultKit.getName(), 0, true, true, true, defaultKit, null));
         }
 
         for (TieredKit tieredKit : kitManager.getAllTieredKits()) {
@@ -373,7 +399,7 @@ public class BedrockKitSelectionUI {
                 boolean hasLevel = progression.getLevel() >= level.getRequiredLevel();
                 boolean canAfford = coins >= level.getPrice();
                 kits.add(new KitDisplayInfo(tieredKit.getBaseName(), level.getLevel(), isUnlocked, hasLevel, canAfford,
-                        tieredKit, level, player));
+                        tieredKit, level, null));
             }
         }
 
@@ -382,10 +408,36 @@ public class BedrockKitSelectionUI {
         return kits;
     }
 
-    private void sendForm(Player player, SimpleForm.Builder form) {
+    public void invalidate(Player player) {
+        menuLoads.remove(player.getUniqueId());
+        sessions.invalidate(player.getUniqueId());
+    }
+
+    private void reportLoadFailure(Player player, UUID playerId, String operation, RuntimeException error) {
+        MicroBattles.getInstance().getLogger().warning(
+                "Could not load Bedrock " + operation + " for " + playerId + ": " + error.getMessage());
+        if (player.isOnline()) {
+            player.sendMessage(ChatColor.RED + message(player, "microbattles.kit.menu.failed"));
+        }
+    }
+
+    static boolean renderEligible(boolean primaryThread, boolean online) {
+        return primaryThread && online;
+    }
+
+    private boolean sendForm(Player player, SimpleForm.Builder form) {
         FloodgatePlayer fgPlayer = FloodgateApi.getInstance().getPlayer(player.getUniqueId());
-        if (fgPlayer != null)
-            fgPlayer.sendForm(form.build());
+        if (fgPlayer == null) return false;
+        fgPlayer.sendForm(form.build());
+        return true;
+    }
+
+    private record MenuSnapshot(int playerLevel, int playerCoins, int playerXp, int xpForNextLevel,
+            List<String> weeklyFreeKits, List<KitDisplayInfo> kits) {
+        private MenuSnapshot {
+            weeklyFreeKits = List.copyOf(weeklyFreeKits);
+            kits = List.copyOf(kits);
+        }
     }
 
 }
