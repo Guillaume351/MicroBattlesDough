@@ -31,12 +31,14 @@ public class KitCommand implements CommandExecutor {
             try {
                 tier = Integer.parseInt(args[1]);
             } catch (NumberFormatException exception) {
-                player.sendMessage("§cUsage: /kit preview <1-3> <kit name>");
+                player.sendMessage("§c" + LocaleManager.getMessage(
+                        "microbattles.kit.preview.usage", player.locale()));
                 return true;
             }
             String kitName = String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length));
             if (!KitManager.getInstance().previewKit(player, kitName, tier)) {
-                player.sendMessage("§cUnknown kit/tier, or preview is unavailable after the match starts.");
+                player.sendMessage("§c" + LocaleManager.getMessage(
+                        "microbattles.kit.preview.invalid", player.locale()));
             }
             return true;
         }

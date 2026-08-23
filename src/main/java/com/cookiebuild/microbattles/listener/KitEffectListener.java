@@ -279,7 +279,8 @@ public class KitEffectListener implements Listener {
         long cooldownMillis = cooldownSeconds * 1_000L;
         if (now - lastUsed < cooldownMillis) {
             long remaining = Math.max(1, (cooldownMillis - (now - lastUsed) + 999L) / 1_000L);
-            player.sendMessage(ChatColor.RED + "Ability ready in " + remaining + "s.");
+            player.sendMessage(ChatColor.RED + LocaleManager.getMessage(
+                    "microbattles.kit.ability_cooldown", player.locale(), remaining));
             return false;
         }
         playerCooldowns.put(ability, now);

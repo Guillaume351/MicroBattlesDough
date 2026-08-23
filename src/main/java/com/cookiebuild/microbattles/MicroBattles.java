@@ -127,7 +127,8 @@ public class MicroBattles extends JavaPlugin {
 
         // Register Commands
         getCommand("kit").setExecutor(new KitCommand(kitSelectorListener));
-        MapVoteCommand mapVoteCommand = new MapVoteCommand();
+        MapVoteCommand mapVoteCommand = new MapVoteCommand(this);
+        getServer().getPluginManager().registerEvents(mapVoteCommand, this);
         getCommand("mbvote").setExecutor(mapVoteCommand);
         getCommand("mbvote").setTabCompleter(mapVoteCommand);
     }
