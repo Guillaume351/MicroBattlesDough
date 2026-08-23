@@ -124,7 +124,7 @@ public class BedrockKitSelectionUI {
         buttonMapping.add(null);
 
         formBuilder.validResultHandler(response -> {
-            int buttonId = response.getClickedButtonId();
+            int buttonId = response.clickedButtonId();
 
             MainThreadPlayerAction.dispatch(MicroBattles.getInstance(), player, () -> {
                 if (!sessions.consume(playerId, nonce, scope)) return;
@@ -189,7 +189,7 @@ public class BedrockKitSelectionUI {
         buttonMapping.add(null);
 
         formBuilder.validResultHandler(response -> {
-            int buttonId = response.getClickedButtonId();
+            int buttonId = response.clickedButtonId();
 
             MainThreadPlayerAction.dispatch(MicroBattles.getInstance(), player, () -> {
                 if (!sessions.consume(playerId, nonce, scope)) return;
@@ -240,7 +240,7 @@ public class BedrockKitSelectionUI {
                 .content(kitManager.getKitDescription(kitInfo.kitName, player)
                         + "\n\n" + message(player, "microbattles.kit.preview.detail"))
                 .validResultHandler(response -> {
-                    int index = response.getClickedButtonId();
+                    int index = response.clickedButtonId();
                     MainThreadPlayerAction.dispatch(MicroBattles.getInstance(), player, () -> {
                         if (!sessions.consume(player.getUniqueId(), nonce, scope)) return;
                         if (index == 0) {
@@ -296,7 +296,7 @@ public class BedrockKitSelectionUI {
                 "actions/back");
         actions.add("back");
         builder.validResultHandler(response -> {
-                    int index = response.getClickedButtonId();
+                    int index = response.clickedButtonId();
                     MainThreadPlayerAction.dispatch(MicroBattles.getInstance(), player, () -> {
                         if (!sessions.consume(player.getUniqueId(), nonce, scope)
                                 || index < 0 || index >= actions.size()) return;

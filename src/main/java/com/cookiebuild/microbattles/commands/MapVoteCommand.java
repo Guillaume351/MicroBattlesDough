@@ -86,7 +86,7 @@ public final class MapVoteCommand implements CommandExecutor, TabCompleter, List
             maps.forEach(map -> BedrockFormImages.button(form, BedrockButtonText.format(map.getKey(),
                     message(player, "microbattles.map_vote.count", map.getValue())), "modes/microbattles"));
             form.validResultHandler(response -> {
-                int index = response.getClickedButtonId();
+                int index = response.clickedButtonId();
                 if (index >= 0 && index < maps.size()) Bukkit.getScheduler().runTask(plugin,
                         () -> vote(player, maps.get(index).getKey()));
             });
