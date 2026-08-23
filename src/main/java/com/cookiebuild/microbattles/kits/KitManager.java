@@ -310,7 +310,7 @@ public final class KitManager {
         equipTieredKit(player, kitName, level);
         CookieDough.getInstance().getPlayerHubMenu().ensureQueueControl(player);
         player.sendMessage(ChatColor.AQUA + LocaleManager.getMessage("microbattles.kit.preview",
-                player.locale(), kitName, roman(level)));
+                player.locale(), KitDisplayNames.localized(kitName, player.locale()), roman(level)));
         Bukkit.getScheduler().runTaskLater(MicroBattles.getInstance(), () -> {
             CookiePlayer current = PlayerManager.getPlayer(player);
             Game currentGame = current == null ? null : GameManager.getGameOfPlayer(current);

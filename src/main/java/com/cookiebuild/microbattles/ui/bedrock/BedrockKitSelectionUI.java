@@ -20,6 +20,7 @@ import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.kits.Kit;
+import com.cookiebuild.microbattles.kits.KitDisplayNames;
 import com.cookiebuild.microbattles.kits.KitLevel;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.kits.TieredKit;
@@ -93,7 +94,9 @@ public class BedrockKitSelectionUI {
         UUID playerId = player.getUniqueId();
         String statsContent = message(player, "microbattles.kit.bedrock.stats", snapshot.playerLevel(),
                 snapshot.playerCoins(), snapshot.playerXp(), snapshot.xpForNextLevel(),
-                String.join(" / ", snapshot.weeklyFreeKits()));
+                snapshot.weeklyFreeKits().stream()
+                        .map(name -> KitDisplayNames.localized(name, player.locale()))
+                        .collect(Collectors.joining(" / ")));
         List<KitDisplayInfo> ownedKits = snapshot.kits().stream()
                 .filter(k -> k.unlocked).collect(Collectors.toList());
 
@@ -203,14 +206,14 @@ public class BedrockKitSelectionUI {
     }
 
     private String createOwnedKitButtonText(Player player, KitDisplayInfo kit) {
-        String displayName = kit.level == 0 ? kit.kitName : kit.kitLevel.getDisplayName(kit.kitName);
+        String displayName = KitDisplayNames.localizedTier(kit.kitName, kit.level, player.locale());
         String rotation = kit.level == 1 && kitManager.isWeeklyFreeKit(kit.kitName) ? " §6★" : "";
         return BedrockButtonText.format("✓ " + displayName + rotation,
                 message(player, "microbattles.kit.select"));
     }
 
     private String createShopKitButtonText(Player player, KitDisplayInfo kit) {
-        String displayName = kit.level == 0 ? kit.kitName : kit.kitLevel.getDisplayName(kit.kitName);
+        String displayName = KitDisplayNames.localizedTier(kit.kitName, kit.level, player.locale());
         if (kit.hasLevel && kit.canAfford) {
             return BedrockButtonText.format(displayName,
                     message(player, "microbattles.kit.price", kit.kitLevel.getPrice()));
@@ -218,13 +221,14 @@ public class BedrockKitSelectionUI {
             String requirement = !kit.hasLevel
                     ? message(player, "microbattles.kit.requires_level", kit.kitLevel.getRequiredLevel())
                     : message(player, "microbattles.kit.not_enough_coins");
-            return BedrockButtonText.format("[LOCKED] " + displayName, requirement);
+            return BedrockButtonText.format("[" + message(player, "microbattles.kit.locked_label") + "] "
+                    + displayName, requirement);
         }
     }
 
     private void handleKitSelection(Player player, KitDisplayInfo kitInfo) {
-        String displayName = kitInfo.level == 0 ? kitInfo.kitName
-                : kitInfo.kitLevel.getDisplayName(kitInfo.kitName);
+        String displayName = KitDisplayNames.localizedTier(
+                kitInfo.kitName, kitInfo.level, player.locale());
         if (kitInfo.level == 0) {
             mutateKit(player, kitInfo, false, false);
             return;
@@ -272,7 +276,8 @@ public class BedrockKitSelectionUI {
         String scope = "microbattles:purchase:" + imageId(kitInfo.kitName) + ":" + kitInfo.level;
         UUID nonce = sessions.issue(player.getUniqueId(), scope);
         SimpleForm.Builder builder = SimpleForm.builder()
-                .title("§l§e" + kitInfo.kitLevel.getDisplayName(kitInfo.kitName))
+                .title("§l§e" + KitDisplayNames.localizedTier(
+                        kitInfo.kitName, kitInfo.level, player.locale()))
                 .content(kitManager.getKitDescription(kitInfo.kitName, player) + "\n\n§6"
                         + message(player, "microbattles.kit.price", kitInfo.kitLevel.getPrice())
                         + (purchasable ? "" : "\n§c" + message(
@@ -333,8 +338,8 @@ public class BedrockKitSelectionUI {
             boolean completed = success;
             Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
                 if (!player.isOnline()) return;
-                String displayName = kitInfo.level == 0 ? kitInfo.kitName
-                        : kitInfo.kitLevel.getDisplayName(kitInfo.kitName);
+                String displayName = KitDisplayNames.localizedTier(
+                        kitInfo.kitName, kitInfo.level, player.locale());
                 String key = completed
                         ? purchase ? "microbattles.kit.action.purchased" : "microbattles.kit.action.selected"
                         : "microbattles.kit.action.failed";

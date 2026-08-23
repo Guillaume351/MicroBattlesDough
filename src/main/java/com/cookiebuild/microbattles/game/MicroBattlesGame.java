@@ -37,6 +37,7 @@ import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.kits.KitManager;
+import com.cookiebuild.microbattles.kits.KitDisplayNames;
 import com.cookiebuild.microbattles.listener.KitSelectorListener;
 import com.cookiebuild.microbattles.map.GameMap;
 import com.cookiebuild.microbattles.map.MapManager;
@@ -220,16 +221,19 @@ public class MicroBattlesGame extends Game {
                 kitName = selectedKitName.split(":")[0];
             }
 
+            String localizedKitName = KitDisplayNames.localized(
+                    kitName, cookiePlayer.getPlayer().locale());
             String originalName = cookiePlayer.getPlayer().getName();
-            String kitDisplayName = "§f" + originalName + "\n§7[" + kitName + "]";
+            String kitDisplayName = "§f" + originalName + "\n§7[" + localizedKitName + "]";
             cookiePlayer.getPlayer().setDisplayName(kitDisplayName);
             cookiePlayer.getPlayer().setPlayerListName(kitDisplayName);
 
             cookiePlayer.getPlayer().sendMessage(
-                    "§a" + LocaleManager.getMessage("kit.equipped", cookiePlayer.getPlayer().locale(), kitName));
+                    "§a" + LocaleManager.getMessage(
+                            "kit.equipped", cookiePlayer.getPlayer().locale(), localizedKitName));
             cookiePlayer.getPlayer().showTitle(
                     Title.title(
-                            Component.text("§6" + kitName),
+                            Component.text("§6" + localizedKitName),
                             Component.text("§a" + LocaleManager.getMessage(
                                     "microbattles.kit.equipped.subtitle", cookiePlayer.getPlayer().locale())),
                             Title.Times.times(Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofSeconds(1))));

@@ -29,6 +29,7 @@ import com.cookiebuild.cookiedough.service.PlayerStatsService;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.kits.KitLevel;
+import com.cookiebuild.microbattles.kits.KitDisplayNames;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.kits.TieredKit;
 import com.cookiebuild.microbattles.ui.bedrock.BedrockKitSelectionUI;
@@ -175,7 +176,8 @@ public final class KitSelectionUI implements Listener {
         meta.setDisplayName(ChatColor.GOLD + message(player, "microbattles.kit.rotation.title"));
         List<String> lore = new ArrayList<>();
         lore.add(MenuLore.legacyDetail(message(player, "microbattles.kit.rotation.detail")));
-        rotation.forEach(name -> lore.add(ChatColor.AQUA + "• " + name));
+        rotation.forEach(name -> lore.add(ChatColor.AQUA + "• "
+                + KitDisplayNames.localized(name, player.locale())));
         lore.add(MenuLore.legacyDetail(message(player, "microbattles.kit.rotation.schedule")));
         meta.setLore(lore);
         item.setItemMeta(meta);
@@ -185,7 +187,7 @@ public final class KitSelectionUI implements Listener {
     private ItemStack kitItem(Entry entry, Player player) {
         ItemStack item = new ItemStack(getKitMaterial(entry.name()));
         ItemMeta meta = item.getItemMeta();
-        String display = entry.level() == 0 ? entry.name() : entry.name() + " " + roman(entry.level());
+        String display = KitDisplayNames.localizedTier(entry.name(), entry.level(), player.locale());
         ChatColor color = entry.owned() ? ChatColor.GREEN
                 : entry.levelReady() && entry.prerequisiteReady() ? ChatColor.YELLOW : ChatColor.RED;
         meta.setDisplayName(ChatColor.RESET + color.toString() + display);
@@ -302,7 +304,7 @@ public final class KitSelectionUI implements Listener {
             boolean bought = purchased;
             Bukkit.getScheduler().runTask(MicroBattles.getInstance(), () -> {
                 if (!player.isOnline()) return;
-                String display = level == 0 ? kitName : kitName + " " + roman(level);
+                String display = KitDisplayNames.localizedTier(kitName, level, player.locale());
                 String key = selected
                         ? bought ? "microbattles.kit.action.purchased" : "microbattles.kit.action.selected"
                         : "microbattles.kit.action.failed";
@@ -334,10 +336,6 @@ public final class KitSelectionUI implements Listener {
             case "Mobility" -> Material.FEATHER;
             default -> Material.CHEST;
         };
-    }
-
-    private String roman(int level) {
-        return switch (level) { case 1 -> "I"; case 2 -> "II"; case 3 -> "III"; default -> ""; };
     }
 
     private static String message(Player player, String key, Object... arguments) {
