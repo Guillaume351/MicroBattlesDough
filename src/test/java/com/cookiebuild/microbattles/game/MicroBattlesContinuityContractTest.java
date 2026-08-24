@@ -15,6 +15,9 @@ class MicroBattlesContinuityContractTest {
         String removal = source.substring(source.indexOf("public synchronized void removePlayer(CookiePlayer player, String reason)"));
         assertTrue(source.contains("implements ReconnectableGame"));
         assertTrue(source.contains("PlayerActivitySnapshot.capture"));
+        assertTrue(source.contains("protected Location spectatorDestination"));
+        assertTrue(source.contains("reconnectKits.put"));
+        assertTrue(source.contains("restoreSelectedKit(playerId, selectedKit)"));
         assertTrue(source.indexOf("snapshot.relocate") < source.indexOf("restorePlayerAfterReconnect(cookiePlayer)"));
         assertTrue(source.indexOf("restorePlayerAfterReconnect(cookiePlayer)") < source.indexOf("snapshot.applyState"));
         assertTrue(removal.indexOf("getSpectators().stream()")

@@ -36,6 +36,10 @@ import com.cookiebuild.microbattles.listener.KitSelectorListener;
 /** Kit catalog, unlock policy and balanced sidegrade loadouts. */
 public final class KitManager {
     private static final int MAX_CACHED_SELECTIONS = 4_096;
+    private static final Set<String> TIERED_KIT_NAMES = Set.of(
+            "Explosive Archer", "Enderman", "Knockback Warrior", "Tank", "Ninja", "Archer",
+            "Berserker", "Chemist", "Assassin", "Miner", "Vampire", "Frost Mage",
+            "Juggernaut", "Trapper", "Alchemist", "Mobility");
     private static KitManager instance;
     private final Map<String, Kit> originalKits = new HashMap<>();
     private final Map<String, TieredKit> tieredKits = new HashMap<>();
@@ -197,6 +201,27 @@ public final class KitManager {
             playerSelectedKits.remove(playerId);
             if (profileLoads.contains(playerId)) discardedProfileLoads.add(playerId);
         }
+    }
+
+    /** Restores the authoritative in-match selection after a transport reconnect. */
+    public boolean restoreSelectedKit(UUID playerId, String selection) {
+        if (playerId == null || !isRestorableSelection(selection)) return false;
+        cacheSelection(playerId, selection, true);
+        return true;
+    }
+
+    static boolean isRestorableSelection(String selection) {
+        if (selection == null || selection.isBlank()) return false;
+        String[] parts = selection.split(":", 2);
+        if (parts.length != 2) return false;
+        int level;
+        try {
+            level = Integer.parseInt(parts[1]);
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
+        return "Default".equals(parts[0]) && level == 0
+                || TIERED_KIT_NAMES.contains(parts[0]) && level >= 1 && level <= 3;
     }
 
     private void cacheSelection(UUID playerId, String selection, boolean replace) {

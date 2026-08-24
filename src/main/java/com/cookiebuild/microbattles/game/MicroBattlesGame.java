@@ -59,6 +59,7 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
     private final Map<UUID, Long> disconnectedAt = new HashMap<>();
     private final Map<UUID, PlayerActivitySnapshot> reconnectSnapshots = new HashMap<>();
     private final Map<UUID, String> reconnectTeams = new HashMap<>();
+    private final Map<UUID, String> reconnectKits = new HashMap<>();
 
     // Quick start transition tracking
     private boolean wasInQuickStart = false;
@@ -221,14 +222,9 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
     }
 
     @Override
-    protected boolean teleportToSpectator(CookiePlayer cookiePlayer) {
-        if (map == null || map.getWorld() == null) return false;
-        Player player = cookiePlayer.getPlayer();
-        Location destination = map.getTeamSpawn(0).clone().add(0.0, 12.0, 0.0);
-        if (!destination.getChunk().load() || !player.teleport(destination)) return false;
-        cookiePlayer.resetPlayer();
-        player.setGameMode(GameMode.SPECTATOR);
-        return true;
+    protected Location spectatorDestination(CookiePlayer cookiePlayer) {
+        return map == null || map.getWorld() == null
+                ? null : map.getTeamSpawn(0).clone().add(0.0, 12.0, 0.0);
     }
 
     private void equipKitsForGameStart() {
@@ -632,6 +628,8 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
                 reconnectSnapshots.put(playerId, PlayerActivitySnapshot.capture(player.getPlayer()));
                 MicroBattlesTeam team = getPlayerTeam(player);
                 if (team != null) reconnectTeams.put(playerId, team.getName());
+                String selectedKit = KitManager.getInstance().getSelectedKit(playerId);
+                if (selectedKit != null) reconnectKits.put(playerId, selectedKit);
             }
             scoreboardManager.removeScoreboard(player.getPlayer());
             return;
@@ -649,6 +647,7 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
         disconnectedAt.remove(playerId);
         reconnectSnapshots.remove(playerId);
         reconnectTeams.remove(playerId);
+        reconnectKits.remove(playerId);
 
         scoreboardManager.removeScoreboard(player.getPlayer());
         recentAttackers.remove(player.getPlayer().getUniqueId());
@@ -676,6 +675,7 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
         CookiePlayer previous = team == null ? null : team.getPlayers().stream()
                 .filter(player -> player.getPlayer().getUniqueId().equals(playerId)).findFirst().orElse(null);
         PlayerActivitySnapshot snapshot = reconnectSnapshots.get(playerId);
+        String selectedKit = reconnectKits.get(playerId);
         if (team == null || previous == null || snapshot == null || !hasReconnectReservation(playerId)
                 || !snapshot.relocate(cookiePlayer.getPlayer(), map.getTeamSpawn(
                         teams.values().stream().toList().indexOf(team)))
@@ -683,11 +683,13 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
             return false;
         }
         snapshot.applyState(cookiePlayer.getPlayer());
+        if (selectedKit != null) KitManager.getInstance().restoreSelectedKit(playerId, selectedKit);
         team.removePlayer(previous);
         if (!team.addPlayer(cookiePlayer)) return false;
         disconnectedAt.remove(playerId);
         reconnectSnapshots.remove(playerId);
         reconnectTeams.remove(playerId);
+        reconnectKits.remove(playerId);
         cookiePlayer.setState(PlayerState.IN_GAME);
         scoreboardManager.ensureScoreboard(cookiePlayer.getPlayer(), Component.text("MicroBattles", NamedTextColor.GOLD));
         refreshNameColors();
@@ -877,6 +879,12 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
     @Override
     public void resetGame() {
         super.resetGame();
+        // Game invokes resetGame from its constructor before subclass fields are
+        // initialized, hence the guarded cleanup.
+        if (disconnectedAt != null) disconnectedAt.clear();
+        if (reconnectSnapshots != null) reconnectSnapshots.clear();
+        if (reconnectTeams != null) reconnectTeams.clear();
+        if (reconnectKits != null) reconnectKits.clear();
         // Reset quick start tracking
         wasInQuickStart = false;
         remainingTimeAtQuickStart = 0;

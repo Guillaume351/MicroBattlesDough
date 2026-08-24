@@ -183,8 +183,8 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
     public void onPlayerQuit(PlayerQuitEvent event) {
         var playerId = event.getPlayer().getUniqueId();
         MapManager.removeNextMapVote(playerId);
-        KitManager.getInstance().clearSelectedKit(playerId);
         removeFromMicroBattles(event.getPlayer(), "disconnect");
+        KitManager.getInstance().clearSelectedKit(playerId);
     }
 
     /** Core lobby handling only removes IN_GAME players, so spectators leave here first. */
