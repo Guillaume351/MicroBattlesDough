@@ -894,7 +894,6 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
     }
 
     public void cleanupMap() {
-        ejectSpectatorsToLobby();
         if (map != null && MapManager.unloadMap(map)) {
             map = null;
         }
@@ -1080,6 +1079,13 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
         if (cleanupTask != null) {
             cleanupTask.cancel();
             cleanupTask = null;
+        }
+        if (!ejectOwnedPlayersToLobby()) {
+            cleanupStarted = false;
+            MicroBattles.getInstance().getLogger().warning(
+                    "Deferring MicroBattles map cleanup until every player reaches the lobby: " + getGameId());
+            scheduleCleanup(20L);
+            return;
         }
         for (CookiePlayer player : new ArrayList<>(getPlayers())) {
             if (player.getPlayer().isOnline()) {

@@ -27,7 +27,9 @@ class MicroBattlesContinuityContractTest {
         assertTrue(source.contains("plugin.clearKitEffectState(playerId)"));
         assertTrue(removal.indexOf("getSpectators().stream()")
                 < removal.indexOf("\"disconnect\".equalsIgnoreCase(reason)"));
-        assertTrue(source.indexOf("ejectSpectatorsToLobby();")
-                < source.indexOf("MapManager.unloadMap(map)"));
+        String cleanup = source.substring(source.indexOf("private synchronized void cleanupGameResources()"));
+        assertTrue(cleanup.indexOf("if (!ejectOwnedPlayersToLobby())")
+                < cleanup.indexOf("cleanupMap();"));
+        assertTrue(source.contains("MapManager.unloadMap(map)"));
     }
 }
