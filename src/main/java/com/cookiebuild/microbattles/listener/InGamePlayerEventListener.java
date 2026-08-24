@@ -184,7 +184,7 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
         var playerId = event.getPlayer().getUniqueId();
         MapManager.removeNextMapVote(playerId);
         KitManager.getInstance().clearSelectedKit(playerId);
-        removeFromMicroBattles(event.getPlayer());
+        removeFromMicroBattles(event.getPlayer(), "disconnect");
     }
 
     /** Core lobby handling only removes IN_GAME players, so spectators leave here first. */
@@ -192,15 +192,19 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
     public void onLobbyCommand(PlayerCommandPreprocessEvent event) {
         String command = event.getMessage().trim().toLowerCase(java.util.Locale.ROOT);
         if (command.equals("/lobby") || command.startsWith("/lobby ")) {
-            removeFromMicroBattles(event.getPlayer());
+            removeFromMicroBattles(event.getPlayer(), "returned_lobby");
         }
     }
 
     private void removeFromMicroBattles(Player player) {
+        removeFromMicroBattles(player, "left_game");
+    }
+
+    private void removeFromMicroBattles(Player player, String reason) {
         CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
         Game game = GameManager.getGameOfPlayer(cookiePlayer);
         if (game instanceof MicroBattlesGame microBattlesGame) {
-            microBattlesGame.removePlayer(cookiePlayer);
+            microBattlesGame.removePlayer(cookiePlayer, reason);
         }
     }
 
