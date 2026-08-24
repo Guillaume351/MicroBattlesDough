@@ -31,5 +31,7 @@ class MicroBattlesContinuityContractTest {
         assertTrue(cleanup.indexOf("if (!ejectOwnedPlayersToLobby())")
                 < cleanup.indexOf("cleanupMap();"));
         assertTrue(source.contains("MapManager.unloadMap(map)"));
+        assertTrue(source.indexOf("plugin == null || !plugin.isEnabled()")
+                < source.indexOf(".runTaskLater(plugin, delayTicks)"));
     }
 }

@@ -1062,13 +1062,19 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
         if (cleanupStarted || cleanupTask != null) {
             return;
         }
-        cleanupTask = new BukkitRunnable() {
-            @Override
-            public void run() {
-                cleanupTask = null;
-                cleanupGameResources();
-            }
-        }.runTaskLater(MicroBattles.getInstance(), delayTicks);
+        MicroBattles plugin = MicroBattles.getInstance();
+        if (plugin == null || !plugin.isEnabled()) return;
+        try {
+            cleanupTask = new BukkitRunnable() {
+                @Override
+                public void run() {
+                    cleanupTask = null;
+                    cleanupGameResources();
+                }
+            }.runTaskLater(plugin, delayTicks);
+        } catch (RuntimeException error) {
+            plugin.getLogger().warning("Could not schedule MicroBattles cleanup retry: " + error.getMessage());
+        }
     }
 
     private synchronized void cleanupGameResources() {
