@@ -27,6 +27,8 @@ import org.bukkit.scoreboard.Team;
 import com.cookiebuild.cookiedough.game.Game;
 import com.cookiebuild.cookiedough.game.GameManager;
 import com.cookiebuild.cookiedough.game.GameState;
+import com.cookiebuild.cookiedough.game.PlayerActivitySnapshot;
+import com.cookiebuild.cookiedough.game.ReconnectableGame;
 import com.cookiebuild.cookiedough.lobby.LobbyManager;
 import com.cookiebuild.cookiedough.lobby.LobbyScoreboard;
 import com.cookiebuild.cookiedough.model.Match;
@@ -48,11 +50,16 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.title.Title;
 
-public class MicroBattlesGame extends Game {
+public class MicroBattlesGame extends Game implements ReconnectableGame {
+    private static final long RECONNECT_GRACE_MILLIS = Duration.ofSeconds(60).toMillis();
     int teamSize = 3;
     private GameMap map;
     private final Map<String, MicroBattlesTeam> teams = new LinkedHashMap<>();
     private final Map<UUID, Integer> playerOriginalViewDistances = new HashMap<>();
+    private final Map<UUID, Long> disconnectedAt = new HashMap<>();
+    private final Map<UUID, PlayerActivitySnapshot> reconnectSnapshots = new HashMap<>();
+    private final Map<UUID, String> reconnectTeams = new HashMap<>();
+    private final Map<UUID, String> reconnectKits = new HashMap<>();
 
     // Quick start transition tracking
     private boolean wasInQuickStart = false;
@@ -209,6 +216,17 @@ public class MicroBattlesGame extends Game {
         equipKitsForGameStart();
     }
 
+    @Override
+    public boolean supportsSpectating() {
+        return true;
+    }
+
+    @Override
+    protected Location spectatorDestination(CookiePlayer cookiePlayer) {
+        return map == null || map.getWorld() == null
+                ? null : map.getTeamSpawn(0).clone().add(0.0, 12.0, 0.0);
+    }
+
     private void equipKitsForGameStart() {
         KitManager kitManager = KitManager.getInstance();
         for (CookiePlayer cookiePlayer : getPlayers()) {
@@ -319,6 +337,7 @@ public class MicroBattlesGame extends Game {
         updateGameInfo();
 
         if (getState() == GameState.RUNNING) {
+            expireReconnectReservations();
             runningSeconds++;
             if (!timeoutWarningSent && runningSeconds >= MAXIMUM_RUNNING_SECONDS - 60) {
                 timeoutWarningSent = true;
@@ -588,16 +607,49 @@ public class MicroBattlesGame extends Game {
 
     @Override
     public synchronized void removePlayer(CookiePlayer player) {
+        removePlayer(player, "left_game");
+    }
+
+    @Override
+    public synchronized void removePlayer(CookiePlayer player, String reason) {
+        if (player == null || player.getPlayer() == null) return;
+        UUID playerId = player.getPlayer().getUniqueId();
+        if (getSpectators().stream().anyMatch(viewer ->
+                viewer.getPlayer().getUniqueId().equals(playerId))) {
+            super.removePlayer(player, reason);
+            scoreboardManager.removeScoreboard(player.getPlayer());
+            return;
+        }
         boolean wasParticipant = getPlayers().contains(player);
-        super.removePlayer(player);
+        if (wasParticipant && getState() == GameState.RUNNING && "disconnect".equalsIgnoreCase(reason)
+                && player.getPlayer().getGameMode() != GameMode.SPECTATOR) {
+            if (!disconnectedAt.containsKey(playerId)) {
+                disconnectedAt.put(playerId, System.currentTimeMillis());
+                reconnectSnapshots.put(playerId, PlayerActivitySnapshot.capture(player.getPlayer()));
+                MicroBattlesTeam team = getPlayerTeam(player);
+                if (team != null) reconnectTeams.put(playerId, team.getName());
+                String selectedKit = KitManager.getInstance().getSelectedKit(playerId);
+                if (selectedKit != null) reconnectKits.put(playerId, selectedKit);
+            }
+            scoreboardManager.removeScoreboard(player.getPlayer());
+            return;
+        }
+        super.removePlayer(player, reason);
         if (!wasParticipant) {
             return;
         }
         // Restore view distance
-        if (playerOriginalViewDistances.containsKey(player.getPlayer().getUniqueId())) {
-            player.getPlayer().setViewDistance(playerOriginalViewDistances.get(player.getPlayer().getUniqueId()));
-            playerOriginalViewDistances.remove(player.getPlayer().getUniqueId());
+        if (playerOriginalViewDistances.containsKey(playerId)) {
+            player.getPlayer().setViewDistance(playerOriginalViewDistances.get(playerId));
+            playerOriginalViewDistances.remove(playerId);
         }
+
+        disconnectedAt.remove(playerId);
+        reconnectSnapshots.remove(playerId);
+        reconnectTeams.remove(playerId);
+        reconnectKits.remove(playerId);
+        MicroBattles plugin = MicroBattles.getInstance();
+        if (plugin != null) plugin.clearKitEffectState(playerId);
 
         scoreboardManager.removeScoreboard(player.getPlayer());
         recentAttackers.remove(player.getPlayer().getUniqueId());
@@ -607,6 +659,53 @@ public class MicroBattlesGame extends Game {
             checkForWinner();
         } else {
             participantIds.remove(player.getPlayer().getUniqueId());
+        }
+    }
+
+    @Override
+    public boolean hasReconnectReservation(UUID playerId) {
+        Long disconnected = disconnectedAt.get(playerId);
+        return getState() == GameState.RUNNING && disconnected != null && reconnectTeams.containsKey(playerId)
+                && System.currentTimeMillis() - disconnected <= RECONNECT_GRACE_MILLIS;
+    }
+
+    @Override
+    public synchronized boolean reconnect(CookiePlayer cookiePlayer) {
+        UUID playerId = cookiePlayer.getPlayer().getUniqueId();
+        String teamName = reconnectTeams.get(playerId);
+        MicroBattlesTeam team = teamName == null ? null : teams.get(teamName);
+        CookiePlayer previous = team == null ? null : team.getPlayers().stream()
+                .filter(player -> player.getPlayer().getUniqueId().equals(playerId)).findFirst().orElse(null);
+        PlayerActivitySnapshot snapshot = reconnectSnapshots.get(playerId);
+        String selectedKit = reconnectKits.get(playerId);
+        if (team == null || previous == null || snapshot == null || !hasReconnectReservation(playerId)
+                || !snapshot.relocate(cookiePlayer.getPlayer(), map.getTeamSpawn(
+                        teams.values().stream().toList().indexOf(team)))
+                || !restorePlayerAfterReconnect(cookiePlayer)) {
+            return false;
+        }
+        snapshot.applyState(cookiePlayer.getPlayer());
+        if (selectedKit != null) KitManager.getInstance().restoreSelectedKit(playerId, selectedKit);
+        team.removePlayer(previous);
+        if (!team.addPlayer(cookiePlayer)) return false;
+        disconnectedAt.remove(playerId);
+        reconnectSnapshots.remove(playerId);
+        reconnectTeams.remove(playerId);
+        reconnectKits.remove(playerId);
+        cookiePlayer.setState(PlayerState.IN_GAME);
+        scoreboardManager.ensureScoreboard(cookiePlayer.getPlayer(), Component.text("MicroBattles", NamedTextColor.GOLD));
+        refreshNameColors();
+        return true;
+    }
+
+    private void expireReconnectReservations() {
+        long now = System.currentTimeMillis();
+        for (UUID playerId : List.copyOf(disconnectedAt.keySet())) {
+            Long disconnected = disconnectedAt.get(playerId);
+            if (disconnected == null || now - disconnected <= RECONNECT_GRACE_MILLIS) continue;
+            CookiePlayer previous = getPlayers().stream()
+                    .filter(player -> player.getPlayer().getUniqueId().equals(playerId)).findFirst().orElse(null);
+            if (previous != null) removePlayer(previous, "reconnect_expired");
         }
     }
 
@@ -722,7 +821,7 @@ public class MicroBattlesGame extends Game {
             throw new IllegalStateException("Could not load the MicroBattles arena chunk for "
                     + player.getPlayer().getName());
         }
-        player.getPlayer().teleport(spawnLocation);
+        teleportPlayerSafely(player.getPlayer(), spawnLocation);
     }
 
     private String getRomanNumeral(int number) {
@@ -763,7 +862,7 @@ public class MicroBattlesGame extends Game {
             throw new IllegalStateException("Could not load the MicroBattles arena chunk for "
                     + player.getPlayer().getName());
         }
-        player.getPlayer().teleport(spawnLocation);
+        teleportPlayerSafely(player.getPlayer(), spawnLocation);
 
         if (this.getState() != GameState.RUNNING) {
             player.getPlayer().setGameMode(GameMode.SURVIVAL);
@@ -782,6 +881,12 @@ public class MicroBattlesGame extends Game {
     @Override
     public void resetGame() {
         super.resetGame();
+        // Game invokes resetGame from its constructor before subclass fields are
+        // initialized, hence the guarded cleanup.
+        if (disconnectedAt != null) disconnectedAt.clear();
+        if (reconnectSnapshots != null) reconnectSnapshots.clear();
+        if (reconnectTeams != null) reconnectTeams.clear();
+        if (reconnectKits != null) reconnectKits.clear();
         // Reset quick start tracking
         wasInQuickStart = false;
         remainingTimeAtQuickStart = 0;
@@ -957,13 +1062,19 @@ public class MicroBattlesGame extends Game {
         if (cleanupStarted || cleanupTask != null) {
             return;
         }
-        cleanupTask = new BukkitRunnable() {
-            @Override
-            public void run() {
-                cleanupTask = null;
-                cleanupGameResources();
-            }
-        }.runTaskLater(MicroBattles.getInstance(), delayTicks);
+        MicroBattles plugin = MicroBattles.getInstance();
+        if (plugin == null || !plugin.isEnabled()) return;
+        try {
+            cleanupTask = new BukkitRunnable() {
+                @Override
+                public void run() {
+                    cleanupTask = null;
+                    cleanupGameResources();
+                }
+            }.runTaskLater(plugin, delayTicks);
+        } catch (RuntimeException error) {
+            plugin.getLogger().warning("Could not schedule MicroBattles cleanup retry: " + error.getMessage());
+        }
     }
 
     private synchronized void cleanupGameResources() {
@@ -974,6 +1085,13 @@ public class MicroBattlesGame extends Game {
         if (cleanupTask != null) {
             cleanupTask.cancel();
             cleanupTask = null;
+        }
+        if (!ejectOwnedPlayersToLobby()) {
+            cleanupStarted = false;
+            MicroBattles.getInstance().getLogger().warning(
+                    "Deferring MicroBattles map cleanup until every player reaches the lobby: " + getGameId());
+            scheduleCleanup(20L);
+            return;
         }
         for (CookiePlayer player : new ArrayList<>(getPlayers())) {
             if (player.getPlayer().isOnline()) {

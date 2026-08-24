@@ -1,7 +1,9 @@
 package com.cookiebuild.microbattles.kits;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -17,5 +19,14 @@ class KitManagerDurabilityTest {
                 cacheWrites::incrementAndGet));
 
         assertEquals(0, cacheWrites.get());
+    }
+
+    @Test
+    void reconnectSelectionOnlyAcceptsCataloguedKitLevels() {
+        assertTrue(KitManager.isRestorableSelection("Default:0"));
+        assertTrue(KitManager.isRestorableSelection("Tank:1"));
+        assertFalse(KitManager.isRestorableSelection("Tank:99"));
+        assertFalse(KitManager.isRestorableSelection("Unknown:1"));
+        assertFalse(KitManager.isRestorableSelection("Tank"));
     }
 }

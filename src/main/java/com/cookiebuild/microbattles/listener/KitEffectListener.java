@@ -1,7 +1,5 @@
 package com.cookiebuild.microbattles.listener;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
@@ -42,9 +40,7 @@ import com.cookiebuild.microbattles.kits.KitManager;
 
 /** Runtime kit abilities. Every offensive effect is scoped to enemies in the same match. */
 public class KitEffectListener implements Listener {
-    private final Map<UUID, Map<String, Long>> cooldowns = new HashMap<>();
-    private final Map<UUID, Boolean> assassinInvisibilityBonus = new HashMap<>();
-    private final Map<UUID, Long> lastSneakTime = new HashMap<>();
+    private final KitRuntimeState runtimeState = new KitRuntimeState();
     private final Random random = new Random();
 
     @EventHandler(ignoreCancelled = true)
@@ -97,7 +93,7 @@ public class KitEffectListener implements Listener {
                 }
             }
             case "Assassin" -> {
-                if (assassinInvisibilityBonus.remove(attacker.getUniqueId()) != null) {
+                if (runtimeState.consumeAssassinBonus(attacker.getUniqueId(), System.currentTimeMillis())) {
                     double multiplier = 1.30 + (Math.max(1, tier) * 0.05);
                     event.setDamage(event.getDamage() * multiplier);
                     attacker.sendMessage(ChatColor.DARK_PURPLE
@@ -137,9 +133,7 @@ public class KitEffectListener implements Listener {
             return;
         }
         long now = System.currentTimeMillis();
-        Long previous = lastSneakTime.put(player.getUniqueId(), now);
-        if (previous != null && now - previous < 500) {
-            lastSneakTime.remove(player.getUniqueId());
+        if (runtimeState.recordSneak(player.getUniqueId(), now)) {
             activateInvisibility(player, kit, getSelectedTier(player));
         }
     }
@@ -209,9 +203,8 @@ public class KitEffectListener implements Listener {
         player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, duration, 0));
         player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, duration, 0));
         if (assassin) {
-            assassinInvisibilityBonus.put(player.getUniqueId(), true);
-            Bukkit.getScheduler().runTaskLater(MicroBattles.getInstance(),
-                    () -> assassinInvisibilityBonus.remove(player.getUniqueId()), duration);
+            runtimeState.armAssassinBonus(player.getUniqueId(),
+                    System.currentTimeMillis() + duration * 50L);
         }
         player.getWorld().spawnParticle(Particle.SMOKE, player.getLocation().add(0, 1, 0), 12);
         player.playSound(player.getLocation(), Sound.ENTITY_ILLUSIONER_MIRROR_MOVE, 0.8f, 1.0f);
@@ -256,33 +249,44 @@ public class KitEffectListener implements Listener {
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        clearPlayerState(event.getPlayer().getUniqueId());
+        scheduleCleanupIfUnowned(event.getPlayer().getUniqueId());
     }
 
     @EventHandler
     public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
-        if (getRunningGame(event.getPlayer()) == null) {
-            clearPlayerState(event.getPlayer().getUniqueId());
-        }
+        scheduleCleanupIfUnowned(event.getPlayer().getUniqueId());
     }
 
-    private void clearPlayerState(UUID playerId) {
-        cooldowns.remove(playerId);
-        assassinInvisibilityBonus.remove(playerId);
-        lastSneakTime.remove(playerId);
+    public void clearPlayerState(UUID playerId) {
+        runtimeState.clear(playerId);
+    }
+
+    private void scheduleCleanupIfUnowned(UUID playerId) {
+        MicroBattles plugin = MicroBattles.getInstance();
+        if (plugin == null || !plugin.isEnabled()) {
+            clearPlayerState(playerId);
+            return;
+        }
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            boolean retainedByMatch = GameManager.getGames().stream()
+                    .filter(MicroBattlesGame.class::isInstance)
+                    .map(MicroBattlesGame.class::cast)
+                    .anyMatch(game -> game.hasReconnectReservation(playerId)
+                            || game.getPlayers().stream().anyMatch(player ->
+                                    player.getPlayer().getUniqueId().equals(playerId)));
+            if (!retainedByMatch) clearPlayerState(playerId);
+        });
     }
 
     private boolean checkCooldown(Player player, String ability, int cooldownSeconds) {
         long now = System.currentTimeMillis();
-        Map<String, Long> playerCooldowns = cooldowns.computeIfAbsent(player.getUniqueId(), ignored -> new HashMap<>());
-        long lastUsed = playerCooldowns.getOrDefault(ability, 0L);
-        long cooldownMillis = cooldownSeconds * 1_000L;
-        if (now - lastUsed < cooldownMillis) {
-            long remaining = Math.max(1, (cooldownMillis - (now - lastUsed) + 999L) / 1_000L);
-            player.sendMessage(ChatColor.RED + "Ability ready in " + remaining + "s.");
+        long remaining = runtimeState.useCooldown(
+                player.getUniqueId(), ability, cooldownSeconds * 1_000L, now);
+        if (remaining > 0L) {
+            player.sendMessage(ChatColor.RED + LocaleManager.getMessage(
+                    "microbattles.kit.ability_cooldown", player.locale(), remaining));
             return false;
         }
-        playerCooldowns.put(ability, now);
         return true;
     }
 

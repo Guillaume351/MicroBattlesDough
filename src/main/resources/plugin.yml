@@ -1,7 +1,7 @@
 name: MicroBattles
 version: '${version}'
 main: com.cookiebuild.microbattles.MicroBattles
-api-version: '26.1.2'
+api-version: '26.2'
 load: POSTWORLD
 depend: [ CookieDough ]
 

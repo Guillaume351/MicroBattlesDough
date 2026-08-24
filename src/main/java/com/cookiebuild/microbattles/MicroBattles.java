@@ -29,6 +29,7 @@ public class MicroBattles extends JavaPlugin {
     private StandbyArenaService<MapManager.PreparedMap, MicroBattlesGame> arenas;
     private boolean shuttingDown;
     private NamespacedKey kitSelectorKey;
+    private KitEffectListener kitEffectListener;
 
     public static MicroBattles getInstance() {
         return instance;
@@ -36,6 +37,10 @@ public class MicroBattles extends JavaPlugin {
 
     public NamespacedKey getKitSelectorKey() {
         return kitSelectorKey;
+    }
+
+    public void clearKitEffectState(UUID playerId) {
+        if (kitEffectListener != null) kitEffectListener.clearPlayerState(playerId);
     }
 
     public static boolean registerNewGame() {
@@ -121,13 +126,15 @@ public class MicroBattles extends JavaPlugin {
 
         // Register Events
         getServer().getPluginManager().registerEvents(inGamePlayerEventListener, this);
-        getServer().getPluginManager().registerEvents(new KitEffectListener(), this);
+        kitEffectListener = new KitEffectListener();
+        getServer().getPluginManager().registerEvents(kitEffectListener, this);
         getServer().getPluginManager().registerEvents(kitSelectorListener, this);
         getServer().getPluginManager().registerEvents(kitSelectorListener.getKitSelectionUI(), this);
 
         // Register Commands
         getCommand("kit").setExecutor(new KitCommand(kitSelectorListener));
-        MapVoteCommand mapVoteCommand = new MapVoteCommand();
+        MapVoteCommand mapVoteCommand = new MapVoteCommand(this);
+        getServer().getPluginManager().registerEvents(mapVoteCommand, this);
         getCommand("mbvote").setExecutor(mapVoteCommand);
         getCommand("mbvote").setTabCompleter(mapVoteCommand);
     }

@@ -17,13 +17,13 @@ import com.cookiebuild.microbattles.MicroBattles;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.ui.KitSelectionUI;
 import com.cookiebuild.cookiedough.ui.MenuLore;
+import com.cookiebuild.cookiedough.utils.LocaleManager;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 
 public class KitSelectorListener implements Listener {
 
-    private static final String KIT_SELECTOR_NAME = "§6Kit Selector";
     private final KitSelectionUI kitSelectionUI;
 
     public KitSelectorListener(KitManager kitManager, MinigameProgressionService minigameStatsService,
@@ -55,15 +55,17 @@ public class KitSelectorListener implements Listener {
         kitSelectionUI.openKitSelectionGUI(player);
     }
 
-    public static ItemStack createKitSelectorCookie() {
+    public static ItemStack createKitSelectorCookie(Player player) {
         ItemStack kitSelector = new ItemStack(Material.COOKIE);
         ItemMeta meta = kitSelector.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(KIT_SELECTOR_NAME);
+            meta.setDisplayName("§6" + LocaleManager.getMessage(
+                    "microbattles.kit.selector.name", player.locale()));
             meta.setLore(List.of(
-                    MenuLore.legacyDetail("Right-click to select your kit"),
-                    MenuLore.legacyDetail("Choose from available kits"),
-                    MenuLore.legacyDetail("and their different tiers")));
+                    MenuLore.legacyDetail(LocaleManager.getMessage(
+                            "microbattles.kit.selector.lore", player.locale())),
+                    MenuLore.legacyDetail(LocaleManager.getMessage(
+                            "microbattles.kit.selector.lore_detail", player.locale()))));
             meta.getPersistentDataContainer().set(
                     MicroBattles.getInstance().getKitSelectorKey(), PersistentDataType.BYTE, (byte) 1);
             kitSelector.setItemMeta(meta);
@@ -72,8 +74,9 @@ public class KitSelectorListener implements Listener {
     }
 
     public static void giveKitSelectorCookie(Player player) {
-        player.getInventory().setItem(0, createKitSelectorCookie());
-        player.sendMessage(Component.text("Use the cookie to select your kit!").color(NamedTextColor.YELLOW));
+        player.getInventory().setItem(0, createKitSelectorCookie(player));
+        player.sendMessage(Component.text(LocaleManager.getMessage(
+                "microbattles.kit.selector.hint", player.locale())).color(NamedTextColor.YELLOW));
     }
 
     public KitSelectionUI getKitSelectionUI() {
