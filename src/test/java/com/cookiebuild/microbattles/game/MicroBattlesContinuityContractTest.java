@@ -20,6 +20,11 @@ class MicroBattlesContinuityContractTest {
         assertTrue(source.contains("restoreSelectedKit(playerId, selectedKit)"));
         assertTrue(source.indexOf("snapshot.relocate") < source.indexOf("restorePlayerAfterReconnect(cookiePlayer)"));
         assertTrue(source.indexOf("restorePlayerAfterReconnect(cookiePlayer)") < source.indexOf("snapshot.applyState"));
+        String effects = Files.readString(Path.of(
+                "src/main/java/com/cookiebuild/microbattles/listener/KitEffectListener.java"));
+        assertTrue(effects.contains("scheduleCleanupIfUnowned"));
+        assertTrue(effects.contains("game.hasReconnectReservation(playerId)"));
+        assertTrue(source.contains("plugin.clearKitEffectState(playerId)"));
         assertTrue(removal.indexOf("getSpectators().stream()")
                 < removal.indexOf("\"disconnect\".equalsIgnoreCase(reason)"));
         assertTrue(source.indexOf("ejectSpectatorsToLobby();")

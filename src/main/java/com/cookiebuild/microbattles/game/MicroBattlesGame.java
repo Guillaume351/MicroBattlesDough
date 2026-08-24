@@ -648,6 +648,8 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
         reconnectSnapshots.remove(playerId);
         reconnectTeams.remove(playerId);
         reconnectKits.remove(playerId);
+        MicroBattles plugin = MicroBattles.getInstance();
+        if (plugin != null) plugin.clearKitEffectState(playerId);
 
         scoreboardManager.removeScoreboard(player.getPlayer());
         recentAttackers.remove(player.getPlayer().getUniqueId());
@@ -819,7 +821,7 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
             throw new IllegalStateException("Could not load the MicroBattles arena chunk for "
                     + player.getPlayer().getName());
         }
-        player.getPlayer().teleport(spawnLocation);
+        teleportPlayerSafely(player.getPlayer(), spawnLocation);
     }
 
     private String getRomanNumeral(int number) {
@@ -860,7 +862,7 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
             throw new IllegalStateException("Could not load the MicroBattles arena chunk for "
                     + player.getPlayer().getName());
         }
-        player.getPlayer().teleport(spawnLocation);
+        teleportPlayerSafely(player.getPlayer(), spawnLocation);
 
         if (this.getState() != GameState.RUNNING) {
             player.getPlayer().setGameMode(GameMode.SURVIVAL);
