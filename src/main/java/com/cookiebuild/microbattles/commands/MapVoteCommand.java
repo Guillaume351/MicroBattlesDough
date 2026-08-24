@@ -15,6 +15,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -110,6 +111,14 @@ public final class MapVoteCommand implements CommandExecutor, TabCompleter, List
         if (map != null) {
             player.closeInventory();
             vote(player, map);
+        }
+    }
+
+    @EventHandler public void drag(InventoryDragEvent event) {
+        if (!(event.getView().getTopInventory().getHolder() instanceof VoteHolder)) return;
+        int topSize = event.getView().getTopInventory().getSize();
+        if (event.getRawSlots().stream().anyMatch(slot -> slot >= 0 && slot < topSize)) {
+            event.setCancelled(true);
         }
     }
 
