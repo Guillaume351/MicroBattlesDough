@@ -340,8 +340,7 @@ public final class KitManager {
             CookiePlayer current = PlayerManager.getPlayer(player);
             Game currentGame = current == null ? null : GameManager.getGameOfPlayer(current);
             if (currentGame == game && !game.hasStarted() && player.isOnline()) {
-                player.getInventory().clear();
-                player.getInventory().setArmorContents(null);
+                clearKitLoadout(player);
                 KitSelectorListener.giveKitSelectorCookie(player);
                 CookieDough.getInstance().getPlayerHubMenu().ensureQueueControl(player);
             }
@@ -350,12 +349,7 @@ public final class KitManager {
     }
 
     private void equipTieredKit(Player player, String kitName, int level) {
-        player.getInventory().clear();
-        player.getInventory().setArmorContents(null);
-        player.getInventory().setItemInOffHand(null);
-        for (PotionEffect effect : player.getActivePotionEffects()) {
-            player.removePotionEffect(effect.getType());
-        }
+        clearKitLoadout(player);
         int tier = Math.max(1, Math.min(3, level));
         switch (kitName) {
             case "Explosive Archer" -> equipExplosiveArcher(player, tier);
@@ -375,6 +369,15 @@ public final class KitManager {
             case "Knockback Warrior" -> equipKnockbackWarrior(player, tier);
             case "Mobility" -> equipMobility(player, tier);
             default -> originalKits.get("Default").equipPlayer(player);
+        }
+    }
+
+    static void clearKitLoadout(Player player) {
+        player.getInventory().clear();
+        player.getInventory().setArmorContents(null);
+        player.getInventory().setItemInOffHand(null);
+        for (PotionEffect effect : player.getActivePotionEffects()) {
+            player.removePotionEffect(effect.getType());
         }
     }
 
