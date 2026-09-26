@@ -87,7 +87,9 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
         CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
         Game game = GameManager.getGameOfPlayer(cookiePlayer);
 
-        if (!(game instanceof MicroBattlesGame microBattlesGame) || !isGameRunning(player)) {
+        if (!(game instanceof MicroBattlesGame microBattlesGame) || !isGameRunning(player)
+                || cookiePlayer.getState() != PlayerState.IN_GAME
+                || player.getGameMode() == GameMode.SPECTATOR) {
             player.setFireTicks(0);
             return false; // Prevent damage if not in a running MicroBattlesGame
         }
@@ -141,7 +143,9 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
 
         if (game instanceof MicroBattlesGame microBattlesGame) {
             if (player.getLocation().getY() < 0) { // Adjust this value based on your map
-                if (isGameRunning(player)) {
+                if (cookiePlayer.getState() == PlayerState.SPECTATING) {
+                    microBattlesGame.respawnPlayerToSpectatorSpawn(cookiePlayer);
+                } else if (isGameRunning(player)) {
                     microBattlesGame.handlePlayerFall(cookiePlayer);
                 } else {
                     // Respawn player to team spawn even if game hasn't started
@@ -157,7 +161,8 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
         CookiePlayer cookiePlayer = PlayerManager.getPlayer(player);
         Game game = GameManager.getGameOfPlayer(cookiePlayer);
 
-        if (game instanceof MicroBattlesGame microBattlesGame && isGameRunning(player)) {
+        if (game instanceof MicroBattlesGame microBattlesGame && isGameRunning(player)
+                && cookiePlayer.getState() == PlayerState.IN_GAME) {
             event.setCancelled(true); // Prevent default death behavior
             event.getDrops().clear();
             event.setDroppedExp(0);

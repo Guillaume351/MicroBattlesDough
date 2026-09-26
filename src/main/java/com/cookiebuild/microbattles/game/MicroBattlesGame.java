@@ -810,8 +810,16 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
             }
         }
         victim.getPlayer().setGameMode(GameMode.SPECTATOR);
+        respawnPlayerToSpectatorSpawn(victim);
         victim.getPlayer().sendMessage(LocaleManager.getMessage("game.player_died", victim.getPlayer().locale()));
         checkForWinner();
+    }
+
+    public void respawnPlayerToSpectatorSpawn(CookiePlayer player) {
+        // A void elimination must not leave the new spectator underneath the arena.
+        player.getPlayer().setFireTicks(0);
+        player.getPlayer().setFallDistance(0);
+        teleportPlayerSafely(player.getPlayer(), spectatorDestination(player));
     }
 
     public void respawnPlayerToTeamSpawn(CookiePlayer player) {
