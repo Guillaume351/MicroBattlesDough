@@ -38,10 +38,12 @@ import com.cookiebuild.cookiedough.service.MatchService;
 import com.cookiebuild.cookiedough.service.MinigameProgressionService;
 import com.cookiebuild.cookiedough.utils.LocaleManager;
 import com.cookiebuild.microbattles.MicroBattles;
+import com.cookiebuild.microbattles.MicroBattlesMessages;
 import com.cookiebuild.microbattles.kits.KitManager;
 import com.cookiebuild.microbattles.kits.KitDisplayNames;
 import com.cookiebuild.microbattles.listener.KitSelectorListener;
 import com.cookiebuild.microbattles.map.GameMap;
+import com.cookiebuild.microbattles.map.MapConfigurationValidator;
 import com.cookiebuild.microbattles.map.MapManager;
 import com.cookiebuild.microbattles.ui.MicroBattlesScoreboardManager;
 import net.kyori.adventure.text.Component;
@@ -90,6 +92,10 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
     private boolean timeoutWarningSent;
     private boolean timedOut;
     private boolean outcomePersisted;
+    private int teamsRepresentedAtStart;
+    private final Set<UUID> mapVoteAnnounced = new LinkedHashSet<>();
+    /** Shown after the kit title (1s in, 2s stay, 1s out) and well before the wall drops. */
+    private static final long HOW_TO_PLAY_DELAY_TICKS = 20L * 4;
 
     public MicroBattlesGame(UUID gameId, GameMap preparedMap, String mapName) {
         super("MicroBattles", gameId);
@@ -171,6 +177,7 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
                         Component.text("MicroBattles", NamedTextColor.GOLD));
                 teleportToGame(player);
                 refreshNameColors();
+                announceMapVote(player.getPlayer());
             } catch (RuntimeException exception) {
                 assignedTeam.removePlayer(player);
                 participantIds.remove(player.getPlayer().getUniqueId());
@@ -187,8 +194,51 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
         }
     }
 
+    private void announceMapVote(Player player) {
+        if (MapManager.getConfiguredMapNames().size() < 2 || !mapVoteAnnounced.add(player.getUniqueId())) {
+            return;
+        }
+        // Plain text on purpose: Bedrock clients cannot click chat components.
+        player.sendMessage(Component.text(MicroBattlesMessages.get(
+                "microbattles.map_vote.announce", player.locale()), NamedTextColor.AQUA));
+    }
+
+    private List<Integer> teamCounts() {
+        return teams.values().stream().map(MicroBattlesTeam::getPlayerCount).toList();
+    }
+
+    @Override
+    protected boolean canStartCountdown() {
+        return super.canStartCountdown() && TeamComposition.canFieldOpposingTeams(teamCounts());
+    }
+
+    /** A party alone in the lobby is split across teams so the match is a real duel. */
+    private void splitLoneTeamForOpening() {
+        TeamComposition.openingSplit(teamCounts()).ifPresent(split -> {
+            List<MicroBattlesTeam> ordered = List.copyOf(teams.values());
+            MicroBattlesTeam from = ordered.get(split.fromTeam());
+            MicroBattlesTeam to = ordered.get(split.toTeam());
+            List<CookiePlayer> moving = List.copyOf(from.getPlayers().subList(
+                    from.getPlayerCount() - split.count(), from.getPlayerCount()));
+            for (CookiePlayer mover : moving) {
+                from.removePlayer(mover);
+                if (!to.addPlayer(mover)) {
+                    from.addPlayer(mover);
+                }
+            }
+            for (CookiePlayer member : List.copyOf(getPlayers())) {
+                member.getPlayer().sendMessage(Component.text(MicroBattlesMessages.get(
+                        "microbattles.party.split", member.getPlayer().locale()), NamedTextColor.YELLOW));
+            }
+            refreshNameColors();
+        });
+    }
+
     @Override
     public void startGame() {
+        // Before super.startGame(): it teleports every player to their final team spawn.
+        splitLoneTeamForOpening();
+        teamsRepresentedAtStart = TeamComposition.representedTeams(teamCounts());
         super.startGame();
 
         // Reset quick start tracking when game starts
@@ -214,6 +264,32 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
         });
 
         equipKitsForGameStart();
+        scheduleHowToPlayTitle();
+    }
+
+    private void scheduleHowToPlayTitle() {
+        MicroBattles plugin = MicroBattles.getInstance();
+        if (plugin == null || !plugin.isEnabled()) return;
+        Bukkit.getScheduler().runTaskLater(plugin, this::showHowToPlayTitle, HOW_TO_PLAY_DELAY_TICKS);
+    }
+
+    private void showHowToPlayTitle() {
+        if (getState() != GameState.RUNNING) return;
+        for (CookiePlayer cookiePlayer : List.copyOf(getPlayers())) {
+            Player player = cookiePlayer.getPlayer();
+            if (cookiePlayer.getState() != PlayerState.IN_GAME || !player.isOnline()) continue;
+            player.showTitle(Title.title(
+                    Component.text(MicroBattlesMessages.get("microbattles.howto.title", player.locale()),
+                            NamedTextColor.GOLD),
+                    Component.text(MicroBattlesMessages.get("microbattles.howto.subtitle", player.locale()),
+                            NamedTextColor.YELLOW),
+                    Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(3), Duration.ofMillis(500))));
+        }
+    }
+
+    /** True when a player at this height has fallen out of the arena (map {@code void-y}, default 0). */
+    public boolean isBelowVoid(double y) {
+        return map == null ? y < MapConfigurationValidator.DEFAULT_VOID_Y : map.isBelowVoid(y);
     }
 
     @Override
@@ -514,6 +590,10 @@ public class MicroBattlesGame extends Game implements ReconnectableGame {
             return;
         }
         setState(GameState.FINISHED);
+        if (!TeamComposition.canAwardWin(teamsRepresentedAtStart)) {
+            // A single-team match is not a contest: no win coins or win stats.
+            winningTeam = null;
+        }
 
         Set<UUID> winnerIds = new LinkedHashSet<>();
         if (winningTeam != null) {

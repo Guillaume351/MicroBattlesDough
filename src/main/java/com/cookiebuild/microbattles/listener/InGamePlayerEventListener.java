@@ -142,7 +142,7 @@ public class InGamePlayerEventListener extends BaseEventBlocker {
         Game game = GameManager.getGameOfPlayer(cookiePlayer);
 
         if (game instanceof MicroBattlesGame microBattlesGame) {
-            if (player.getLocation().getY() < 0) { // Adjust this value based on your map
+            if (microBattlesGame.isBelowVoid(player.getLocation().getY())) {
                 if (cookiePlayer.getState() == PlayerState.SPECTATING) {
                     microBattlesGame.respawnPlayerToSpectatorSpawn(cookiePlayer);
                 } else if (isGameRunning(player)) {

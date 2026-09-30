@@ -23,6 +23,7 @@ public class GameMap {
     private final World world;
     private final List<Location> teamSpawns;
     private final List<Block> wallBlocks = new ArrayList<>();
+    private int voidY = MapConfigurationValidator.DEFAULT_VOID_Y;
 
     public GameMap(String name) {
         this(name, null);
@@ -43,6 +44,19 @@ public class GameMap {
             throw new IllegalStateException("Map template " + name + " does not have a loaded world");
         }
         return world;
+    }
+
+    public int getVoidY() {
+        return voidY;
+    }
+
+    public void setVoidY(int voidY) {
+        this.voidY = voidY;
+    }
+
+    /** True when a player at this height has fallen out of the arena. */
+    public boolean isBelowVoid(double y) {
+        return y < voidY;
     }
 
     public void setTeamSpawn(int teamNumber, Location spawn) {

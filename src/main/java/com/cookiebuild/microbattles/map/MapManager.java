@@ -6,6 +6,7 @@ import com.cookiebuild.cookiedough.game.ArenaPreparationPipeline.PreparedFilesIn
 import com.cookiebuild.cookiedough.utils.FileUtils;
 import com.cookiebuild.cookiedough.utils.ZipUtils;
 import com.cookiebuild.microbattles.MicroBattles;
+import com.cookiebuild.microbattles.MicroBattlesMessages;
 import com.cookiebuild.microbattles.listener.InGamePlayerEventListener;
 import org.bukkit.Bukkit;
 import org.bukkit.GameRules;
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
@@ -236,6 +238,7 @@ public class MapManager {
         GameMap map = new GameMap(prepared.mapName(), world);
         List<Location> teamSpawns = getTeamSpawnsForMap(prepared.mapName(), world);
         for (int i = 0; i < teamSpawns.size(); i++) map.setTeamSpawn(i, teamSpawns.get(i));
+        map.setVoidY(getVoidYForMap(prepared.mapName()));
         map.validateArenaIntegrity();
         MicroBattles.getInstance().getLogger().info("Validated arena terrain for map " + prepared.mapName());
         loadedMaps.put(prepared.worldKey(), map);
@@ -419,6 +422,8 @@ public class MapManager {
                     "Missing configuration for map " + mapName);
             MapConfigurationValidator.validate(mapName, mapSection.getList("team-spawns"),
                     mapSection.getList("wall-coordinates"));
+            MapConfigurationValidator.resolveVoidY(mapName, mapSection.get("void-y"),
+                    mapSection.getList("team-spawns"));
             maps.put(mapName, new GameMap(mapName));
             MicroBattles.getInstance().getLogger().info("Registered map " + mapName);
         }
@@ -450,6 +455,25 @@ public class MapManager {
             throw new IllegalArgumentException("Map " + mapName + " must have exactly four valid team spawns");
         }
         return teamSpawns;
+    }
+
+    private static int getVoidYForMap(String mapName) {
+        ConfigurationSection mapSection = MicroBattles.getInstance().getConfig()
+                .getConfigurationSection("maps." + mapName);
+        if (mapSection == null) return MapConfigurationValidator.DEFAULT_VOID_Y;
+        return MapConfigurationValidator.resolveVoidY(mapName, mapSection.get("void-y"),
+                mapSection.getList("team-spawns", List.of()));
+    }
+
+    /** Readable, localized map name; uses the optional {@code display-name} config value when present. */
+    public static String getMapDisplayName(String mapName, Locale locale) {
+        String canonical = getConfiguredMapNames().stream().filter(name -> name.equalsIgnoreCase(mapName))
+                .findFirst().orElse(mapName);
+        MicroBattles plugin = MicroBattles.getInstance();
+        String configured = plugin == null || canonical == null ? null
+                : plugin.getConfig().getString("maps." + canonical + ".display-name");
+        return MapDisplayNames.displayName(canonical, configured, number -> MicroBattlesMessages.get(
+                "microbattles.map.numbered", locale, number));
     }
 
     public static int[] getWallCoordinatesForMap(String mapName) {

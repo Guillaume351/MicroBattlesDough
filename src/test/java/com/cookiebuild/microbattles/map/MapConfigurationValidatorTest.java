@@ -1,7 +1,10 @@
 package com.cookiebuild.microbattles.map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
@@ -23,5 +26,28 @@ class MapConfigurationValidatorTest {
                 () -> MapConfigurationValidator.validate("arena", SPAWNS.subList(0, 3), List.of(1, 18, 10, 20)));
         assertThrows(IllegalArgumentException.class,
                 () -> MapConfigurationValidator.validate("arena", SPAWNS, List.of(1, 18, 10)));
+    }
+
+    @Test
+    void voidLevelDefaultsToZeroAndMustStayBelowEverySpawn() {
+        assertEquals(0, MapConfigurationValidator.resolveVoidY("arena", null, SPAWNS));
+        assertEquals(-5, MapConfigurationValidator.resolveVoidY("arena", -5, SPAWNS));
+        assertEquals(1, MapConfigurationValidator.resolveVoidY("arena", 1.0, SPAWNS));
+        assertThrows(IllegalArgumentException.class,
+                () -> MapConfigurationValidator.resolveVoidY("arena", 2, SPAWNS));
+        assertThrows(IllegalArgumentException.class,
+                () -> MapConfigurationValidator.resolveVoidY("arena", 0.5, SPAWNS));
+        assertThrows(IllegalArgumentException.class,
+                () -> MapConfigurationValidator.resolveVoidY("arena", "low", SPAWNS));
+    }
+
+    @Test
+    void mapUsesItsConfiguredVoidLevel() {
+        GameMap map = new GameMap("arena");
+        assertTrue(map.isBelowVoid(-0.1));
+        assertFalse(map.isBelowVoid(0));
+        map.setVoidY(10);
+        assertTrue(map.isBelowVoid(9.9));
+        assertFalse(map.isBelowVoid(10));
     }
 }

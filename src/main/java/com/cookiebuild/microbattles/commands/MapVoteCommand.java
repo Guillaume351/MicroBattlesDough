@@ -67,7 +67,8 @@ public final class MapVoteCommand implements CommandExecutor, TabCompleter, List
             Map.Entry<String, Long> map = maps.get(index);
             ItemStack stack = new ItemStack(Material.MAP);
             ItemMeta meta = stack.getItemMeta();
-            meta.displayName(Component.text(map.getKey(), NamedTextColor.GOLD));
+            meta.displayName(Component.text(MapManager.getMapDisplayName(map.getKey(), player.locale()),
+                    NamedTextColor.GOLD));
             meta.lore(List.of(MenuLore.detail(message(player, "microbattles.map_vote.count", map.getValue())),
                     Component.text(message(player, "microbattles.map_vote.select"), NamedTextColor.YELLOW)));
             meta.getPersistentDataContainer().set(mapKey, PersistentDataType.STRING, map.getKey());
@@ -84,7 +85,8 @@ public final class MapVoteCommand implements CommandExecutor, TabCompleter, List
             if (target == null) return false;
             SimpleForm.Builder form = SimpleForm.builder().title("§l§6" + message(player,
                     "microbattles.map_vote.title")).content(message(player, "microbattles.map_vote.content"));
-            maps.forEach(map -> BedrockFormImages.button(form, BedrockButtonText.format(map.getKey(),
+            maps.forEach(map -> BedrockFormImages.button(form, BedrockButtonText.format(
+                    MapManager.getMapDisplayName(map.getKey(), player.locale()),
                     message(player, "microbattles.map_vote.count", map.getValue())), "modes/microbattles"));
             form.validResultHandler(response -> {
                 int index = response.clickedButtonId();
@@ -127,7 +129,8 @@ public final class MapVoteCommand implements CommandExecutor, TabCompleter, List
             player.sendMessage(ChatColor.RED + message(player, "microbattles.map_vote.unknown"));
             return;
         }
-        player.sendMessage(ChatColor.GREEN + message(player, "microbattles.map_vote.recorded", map));
+        player.sendMessage(ChatColor.GREEN + message(player, "microbattles.map_vote.recorded",
+                MapManager.getMapDisplayName(map, player.locale())));
     }
 
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {

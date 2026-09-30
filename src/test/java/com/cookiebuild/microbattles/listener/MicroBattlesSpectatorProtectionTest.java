@@ -55,6 +55,8 @@ class MicroBattlesSpectatorProtectionTest {
         when(participant.getState()).thenReturn(state);
         MicroBattlesGame game = mock(MicroBattlesGame.class);
         when(game.hasStarted()).thenReturn(state != PlayerState.QUEUED);
+        // No map on the mock: exercises the default void level (Y < 0).
+        when(game.isBelowVoid(anyDouble())).thenCallRealMethod();
         PlayerMoveEvent move = mock(PlayerMoveEvent.class);
         when(move.getPlayer()).thenReturn(player);
         InGamePlayerEventListener listener = new InGamePlayerEventListener();
